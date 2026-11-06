@@ -1,0 +1,459 @@
+# ugc-talking-head
+
+Un skill de Claude que convierte un clip vertical de talking-head (el típico video de celular, 60–90 s, 9:16) en un MP4 listo para publicar: silencios cortados, muletillas fuera, subtítulos en bloques de 2–3 palabras, un gancho los primeros 3 segundos y una cama de música a unos −18 dB bajo la voz. Inglés y español.
+
+A Claude Agent Skill that turns a raw vertical talking-head clip into a launch-ready MP4: silence and filler cuts, 2–3 word captions, a 3-second hook, and a music bed about −18 dB under the voice. English and Spanish.
+
+---
+
+## Español
+
+### Qué hace
+
+Un solo pedido. Tú pasas el clip y Claude sigue `SKILL.md`:
+
+1. Transcribe con marcas de tiempo por palabra (WhisperX si está instalado, si no faster-whisper). Sale `words.json` y un SRT.
+2. Quita silencios de más de 0,4 s, dejando 0,05 s de aire a cada lado del corte.
+3. Quita muletillas con listas en inglés y en español. El modo por defecto es conservador.
+4. Propone un gancho en el idioma del clip y espera tu ok.
+5. Renderiza en 1080×1920 con Remotion, o con FFmpeg si Remotion no está.
+6. Normaliza a unos −14 LUFS y, si el corte pasa de 60 s, avisa y recorta.
+
+No hace falta saber editar. Los tiempos los calculan los scripts, no el modelo.
+
+### Requisitos
+
+- macOS con Homebrew, o Linux con apt. El script de instalación se probó en Ubuntu 24.04. La rama de Homebrew no se ejecutó en una Mac en este repositorio.
+- ffmpeg con libass, drawtext, libx264 y loudnorm
+- Python 3.10 o más nuevo
+- Node.js 18 o más nuevo, solo si quieres el render de Remotion
+- Unos 2 GB libres para el modelo `small` en CPU. En GPU el modelo por defecto es `large-v3`
+
+WhisperX es opcional. auto-editor es el motor de silencios preferido; si no está, el corte sale de los huecos entre palabras.
+
+### Instalación en 5 minutos
+
+```bash
+git clone https://github.com/OWNER/REPO.git
+cd REPO
+./install.sh
+./doctor.sh
+```
+
+`install.sh` se puede correr otra vez: no duplica el venv ni reinstala ffmpeg si ya está. La primera transcripción descarga el modelo de Whisper al caché de Hugging Face. En CPU, `small` pesa unos 500 MB y esa primera vez puede tardar varios minutos. Las siguientes usan el archivo ya bajado.
+
+WhisperX, si lo quieres:
+
+```bash
+INSTALL_WHISPERX=1 ./install.sh
+```
+
+### Instalar el skill
+
+**Claude Code, para ti**
+
+```bash
+mkdir -p ~/.claude/skills
+cp -R skills/ugc-talking-head ~/.claude/skills/ugc-talking-head
+```
+
+**Claude Code, solo en un proyecto**
+
+```bash
+mkdir -p .claude/skills
+cp -R skills/ugc-talking-head .claude/skills/ugc-talking-head
+```
+
+**Desde GitHub, cuando el repo sea público** (`npx skills` busca `skills/*/SKILL.md`):
+
+```bash
+npx skills add OWNER/REPO --skill ugc-talking-head -a claude-code
+```
+
+Añade `-g` si lo quieres en tu usuario y no en el proyecto. `-y` evita las preguntas.
+
+**claude.ai**
+
+```bash
+./scripts/package.sh
+```
+
+Eso deja `dist/ugc-talking-head.zip` y `dist/ugc-talking-head.skill`. Los dos son el mismo archivo. Dentro, la raíz es la carpeta `ugc-talking-head/` y `SKILL.md` vive ahí. Un zip con `SKILL.md` suelto en la raíz no lo reconoce Claude. Súbelo en Ajustes → Capacidades → Skills.
+
+El sandbox de claude.ai no trae ffmpeg ni Whisper. El skill está pensado para Claude Code en una máquina donde ya corriste `install.sh`.
+
+### Prompts de ejemplo
+
+Español:
+
+- «Edita este clip y déjalo listo para Reels.»
+- «Quita los silencios y las muletillas, subtítulos grandes, y ponme un gancho.»
+- «Edita este video en modo agresivo y usa esta canción de fondo.»
+- «Sin preguntar, exporta el talking-head.» (se salta el checkpoint)
+
+English:
+
+- «Edit this clip. I need it launch-ready for TikTok.»
+- «Remove the silences and the ums, bold captions, hook on the first three seconds.»
+- «Aggressive filler cut, and use this music file.»
+- «Just export it, don't ask.» (skips the approval stop)
+
+### Configuración
+
+El preset de ejemplo es [`skills/ugc-talking-head/assets/preset.json`](skills/ugc-talking-head/assets/preset.json).
+
+| Clave | Default | Qué cambia |
+| --- | --- | --- |
+| `silence.min_seconds` | 0.4 | Solo se cortan silencios más largos que esto |
+| `silence.padding_seconds` | 0.05 | Aire que se conserva a cada lado del corte |
+| `silence.engine` | `auto` | `auto-editor`, `words`, o `auto` (auto-editor y si falla, palabras) |
+| `silence.audio_threshold` | 0.04 | Umbral de auto-editor (`audio:threshold=`) |
+| `fillers.mode` | `conservative` | `aggressive` quita más frases. Ver `assets/fillers.json` |
+| `captions.max_words` | 3 | Palabras por tarjeta |
+| `captions.highlight_active_word` | true | La palabra activa pasa a amarillo |
+| `hook.duration_seconds` | 3 | Cuánto dura el texto del gancho |
+| `music.file` | null | `null` usa `assets/music/bed.m4a`. O pasa `--music` |
+| `music.duck_db` | -18 | La cama queda estos dB bajo la voz |
+| `music.engine` | `volume` | `volume` es −18 dB fijos. `sidechain` además comprime con la voz |
+| `export.max_duration` | 60 | Tope. Se recorta si `trim_if_over` es true |
+| `export.lufs` | -14 | Loudness integrado |
+
+Las listas de muletillas están en [`assets/fillers.json`](skills/ugc-talking-head/assets/fillers.json). Inglés: um, uh, erm, like, you know, I mean, basically… Español: eh, este, o sea, pues, bueno, mmm, digamos, tipo, ¿me entiendes?… El modo conservador solo corta las claras, y las ambiguas (`este`, `like`, `pues`) únicamente si van solas. El modo agresivo también corta `you know`, `o sea`, `me entiendes` en medio de la frase. Whisper a menudo ni las transcribe: el plan lo dice, no lo escondas.
+
+La cama que viene en el repo es un loop de acordes generado para este proyecto, sin track de terceros. Cámbiala por un archivo del que tengas derechos.
+
+### Estructura
+
+```text
+skills/ugc-talking-head/
+├── SKILL.md
+├── install.sh
+├── doctor.sh
+├── requirements.txt
+├── references/          # detalle que Claude abre solo si lo necesita
+├── assets/
+│   ├── preset.json
+│   ├── fillers.json
+│   ├── fonts/Inter-Bold.ttf
+│   └── music/bed.m4a
+├── scripts/
+│   ├── ugc_edit.py
+│   └── lib/
+└── template/            # proyecto Remotion
+```
+
+El repo además tiene `README.md`, `LICENSE`, `install.sh`, `doctor.sh` y `scripts/package.sh`.
+
+### Pipeline
+
+```mermaid
+flowchart TD
+  A[Clip 9:16] --> B[ffmpeg extrae WAV 16 kHz]
+  B --> C{WhisperX instalado?}
+  C -->|sí| D[WhisperX]
+  C -->|no| E[faster-whisper]
+  D --> F[words.json + SRT]
+  E --> F
+  F --> G{auto-editor?}
+  G -->|sí| H[Timeline v1 y filtro de 0.4 s]
+  G -->|no| I[Huecos entre palabras]
+  H --> J[Muletillas + gancho + plan]
+  I --> J
+  J --> K{¿Confirmas el gancho?}
+  K -->|no| J
+  K -->|sí| L[Corte ffmpeg]
+  L --> M{Remotion?}
+  M -->|sí| N[Composición TalkingHead]
+  M -->|no| O[ASS + drawtext + volume -18 dB]
+  N --> P[loudnorm -14 LUFS y tope 60 s]
+  O --> P
+  P --> Q[final.mp4]
+```
+
+### Demos
+
+En `examples/demo/` hay un MP4 por idioma renderizado con Remotion (`es.mp4`, `en.mp4`) y el mismo corte por FFmpeg (`es-ffmpeg.mp4`, `en-ffmpeg.mp4`). Los clips de origen son sintéticos: voz de gTTS, pausas y muletillas, sobre un fondo 9:16. El PNG de cada uno es un frame con el gancho y el subtítulo activo en amarillo.
+
+### Problemas frecuentes
+
+`./doctor.sh` primero. Si la transcripción se queda callada la primera vez, está bajando el modelo. Exit 10 no es un fallo: es el checkpoint del gancho. Si el plan dice que no había muletillas en el transcript, Whisper se las comió; no se pueden cortar. Más casos en [`references/troubleshooting.md`](skills/ugc-talking-head/references/troubleshooting.md).
+
+### Limitaciones
+
+- Whisper se salta muletillas. `initial_prompt` ayuda un poco y a veces las inventa. No es un detector de «um» de verdad.
+- auto-editor 29.3.1 no tiene `--smooth`. El mínimo de 0,4 s lo aplica este script sobre el timeline v1. Un build distinto puede cambiar los flags: el script no usa ninguno que no haya pasado por `--help` en 29.3.1.
+- El umbral de audio de auto-editor depende del ruido de la sala. Si quiere borrar más del 70 % del clip, se pasa al corte por palabras.
+- Remotion en una empresa de más de 3 personas necesita su licencia de pago. Ver créditos.
+- No hay versión de Windows en esta fase. El render de Remotion a 1080×1920 pide RAM; el script usa `--concurrency=1`.
+- La instalación con Homebrew está escrita y no se ejecutó en macOS aquí.
+- El skill no traduce. Un clip en español sale en español.
+
+### Roadmap (fase 2)
+
+- Premiere y DaVinci a través de MCP, para entregar un timeline en vez de un MP4 cerrado
+- VideoLingo para un doblaje o una traducción con subtítulos aparte
+- HeyGen cuando el clip de entrada sea un avatar y no una toma real
+- Variantes y ganchos A/B a partir del mismo transcript
+- Windows, con rutas y un instalador que no dependa de Homebrew
+
+### Créditos y licencias
+
+Este repositorio es MIT. Copyright 2026 Fabián. Ver `LICENSE`.
+
+| Pieza | Licencia | Nota |
+| --- | --- | --- |
+| [faster-whisper](https://github.com/SYSTRAN/faster-whisper) | MIT | Transcripción en CPU o GPU |
+| Pesos de Whisper (OpenAI) | MIT | Se bajan al correr, no van en el repo |
+| [CTranslate2](https://github.com/OpenNMT/CTranslate2) | MIT | Backend de faster-whisper |
+| [WhisperX](https://github.com/m-bain/whisperX) | BSD-2-Clause | Opcional. Alineación con PyTorch |
+| [auto-editor](https://github.com/WyattBlue/auto-editor) | Unlicense | El código del repo. Los binarios de las releases pueden arrastrar otras licencias |
+| [FFmpeg](https://ffmpeg.org) | GPL o LGPL según el build | No se incluye. Hace falta el del sistema. Un build con libx264 suele ser GPL |
+| [Remotion](https://www.remotion.dev/docs/license) | Licencia Remotion, no es OSI | Gratis para una persona o una empresa de hasta 3 personas, también en uso comercial. Empresas más grandes necesitan Company License |
+| [Inter](https://github.com/rsms/inter) | SIL OFL 1.1 | `assets/fonts/`, ver `OFL.txt` |
+| React | MIT | Dependencia de la plantilla |
+
+La cama `assets/music/bed.m4a` es un loop original generado con ffmpeg para este repo.
+
+### Publicar el repo en GitHub
+
+```bash
+# En github.com crea un repo vacío. Luego:
+git remote add origin git@github.com:OWNER/REPO.git
+git push -u origin main
+./scripts/package.sh
+```
+
+Sustituye `OWNER/REPO` también en esta página. A partir de ahí:
+
+```bash
+npx skills add OWNER/REPO --skill ugc-talking-head -a claude-code
+```
+
+El zip de `dist/` es el que se sube a claude.ai. No hace falta publicarlo como release para que el skill funcione en Claude Code.
+
+---
+
+## English
+
+### What it does
+
+One request. You hand over the clip and Claude follows `SKILL.md`:
+
+1. Transcribe with word timestamps (WhisperX if it is installed, otherwise faster-whisper). You get `words.json` and an SRT.
+2. Cut silences longer than 0.4s, leaving 0.05s of padding on each side.
+3. Cut filler words with English and Spanish lists. The default mode is conservative.
+4. Propose a hook in the clip's language and wait for a yes.
+5. Render 1080×1920 with Remotion, or with FFmpeg when Remotion is not there.
+6. Normalize to about −14 LUFS. If the cut is over 60s, warn and trim.
+
+You do not need to edit. The scripts own the timestamps.
+
+### Requirements
+
+- macOS with Homebrew, or Linux with apt. `install.sh` was run on Ubuntu 24.04. The Homebrew branch was not executed on a Mac in this repo.
+- ffmpeg with libass, drawtext, libx264, and loudnorm
+- Python 3.10+
+- Node.js 18+ only if you want the Remotion render
+- About 2 GB free for the CPU `small` model. On a GPU the default model is `large-v3`
+
+WhisperX is optional. auto-editor is the preferred silence engine. Without it, cuts come from gaps between words.
+
+### Install in 5 minutes
+
+```bash
+git clone https://github.com/OWNER/REPO.git
+cd REPO
+./install.sh
+./doctor.sh
+```
+
+`install.sh` is safe to re-run. The first transcription downloads a Whisper model into the Hugging Face cache. On CPU, `small` is about 500 MB and that first run can take several minutes. Later runs reuse the file.
+
+Optional WhisperX:
+
+```bash
+INSTALL_WHISPERX=1 ./install.sh
+```
+
+### Install the skill
+
+**Claude Code, for you**
+
+```bash
+mkdir -p ~/.claude/skills
+cp -R skills/ugc-talking-head ~/.claude/skills/ugc-talking-head
+```
+
+**Claude Code, this project only**
+
+```bash
+mkdir -p .claude/skills
+cp -R skills/ugc-talking-head .claude/skills/ugc-talking-head
+```
+
+**From GitHub, once the repo is public** (`npx skills` looks for `skills/*/SKILL.md`):
+
+```bash
+npx skills add OWNER/REPO --skill ugc-talking-head -a claude-code
+```
+
+Add `-g` to install for your user instead of the project. `-y` skips the prompts.
+
+**claude.ai**
+
+```bash
+./scripts/package.sh
+```
+
+That writes `dist/ugc-talking-head.zip` and `dist/ugc-talking-head.skill`. They are the same archive. The root inside the archive is the `ugc-talking-head/` folder, and `SKILL.md` is inside that folder. A zip with a bare `SKILL.md` at the root is not recognized. Upload it under Settings → Capabilities → Skills.
+
+The claude.ai sandbox does not ship ffmpeg or Whisper. Use the skill from Claude Code on a machine where `install.sh` has run.
+
+### Example prompts
+
+Spanish:
+
+- «Edita este clip y déjalo listo para Reels.»
+- «Quita los silencios y las muletillas, subtítulos grandes, y ponme un gancho.»
+- «Edita este video en modo agresivo y usa esta canción de fondo.»
+- «Sin preguntar, exporta el talking-head.» (skips the checkpoint)
+
+English:
+
+- «Edit this clip. I need it launch-ready for TikTok.»
+- «Remove the silences and the ums, bold captions, hook on the first three seconds.»
+- «Aggressive filler cut, and use this music file.»
+- «Just export it, don't ask.» (skips the approval stop)
+
+### Configuration
+
+The sample preset is [`skills/ugc-talking-head/assets/preset.json`](skills/ugc-talking-head/assets/preset.json).
+
+| Key | Default | Effect |
+| --- | --- | --- |
+| `silence.min_seconds` | 0.4 | Only silences longer than this are cut |
+| `silence.padding_seconds` | 0.05 | Audio kept on each side of a cut |
+| `silence.engine` | `auto` | `auto-editor`, `words`, or `auto` (auto-editor, then word gaps) |
+| `silence.audio_threshold` | 0.04 | auto-editor threshold (`audio:threshold=`) |
+| `fillers.mode` | `conservative` | `aggressive` removes more phrases. See `assets/fillers.json` |
+| `captions.max_words` | 3 | Words per caption card |
+| `captions.highlight_active_word` | true | The active word turns yellow |
+| `hook.duration_seconds` | 3 | How long the hook stays up |
+| `music.file` | null | `null` uses `assets/music/bed.m4a`. Or pass `--music` |
+| `music.duck_db` | -18 | Bed level under the voice |
+| `music.engine` | `volume` | `volume` is a fixed −18 dB. `sidechain` also ducks with the voice |
+| `export.max_duration` | 60 | Cap. Trimmed when `trim_if_over` is true |
+| `export.lufs` | -14 | Integrated loudness |
+
+Filler lists live in [`assets/fillers.json`](skills/ugc-talking-head/assets/fillers.json). English: um, uh, erm, like, you know, I mean, basically… Spanish: eh, este, o sea, pues, bueno, mmm, digamos, tipo, ¿me entiendes?… Conservative mode cuts clear fillers, and ambiguous ones (`este`, `like`, `pues`) only when they stand alone. Aggressive mode also cuts `you know`, `o sea`, and `me entiendes` mid-sentence. Whisper often never writes them down. The plan says so. Report that, do not claim they were removed.
+
+The bed in the repo is an original chord loop generated for this project. Swap it for a file you have rights to.
+
+### Layout
+
+```text
+skills/ugc-talking-head/
+├── SKILL.md
+├── install.sh
+├── doctor.sh
+├── requirements.txt
+├── references/          # detail Claude opens only when a step needs it
+├── assets/
+│   ├── preset.json
+│   ├── fillers.json
+│   ├── fonts/Inter-Bold.ttf
+│   └── music/bed.m4a
+├── scripts/
+│   ├── ugc_edit.py
+│   └── lib/
+└── template/            # Remotion project
+```
+
+The repo also has `README.md`, `LICENSE`, `install.sh`, `doctor.sh`, and `scripts/package.sh`.
+
+### Pipeline
+
+```mermaid
+flowchart TD
+  A[9:16 clip] --> B[ffmpeg extracts 16 kHz WAV]
+  B --> C{WhisperX installed?}
+  C -->|yes| D[WhisperX]
+  C -->|no| E[faster-whisper]
+  D --> F[words.json + SRT]
+  E --> F
+  F --> G{auto-editor?}
+  G -->|yes| H[v1 timeline and 0.4 s gate]
+  G -->|no| I[Gaps between words]
+  H --> J[Fillers + hook + plan]
+  I --> J
+  J --> K{Confirm the hook?}
+  K -->|no| J
+  K -->|yes| L[ffmpeg cut]
+  L --> M{Remotion?}
+  M -->|yes| N[TalkingHead composition]
+  M -->|no| O[ASS + drawtext + volume -18 dB]
+  N --> P[loudnorm -14 LUFS and 60 s cap]
+  O --> P
+  P --> Q[final.mp4]
+```
+
+### Demos
+
+`examples/demo/` has one Remotion MP4 per language (`es.mp4`, `en.mp4`) and the same cut through FFmpeg (`es-ffmpeg.mp4`, `en-ffmpeg.mp4`). The sources are synthetic: gTTS voice, pauses, and fillers, on a 9:16 background. Each PNG is a frame with the hook and the active caption word in yellow.
+
+### Troubleshooting
+
+Run `./doctor.sh` first. A quiet first transcription is the model download. Exit code 10 is the hook checkpoint, not a failure. If the plan says the transcript had no fillers, Whisper dropped them and they cannot be cut. More cases are in [`references/troubleshooting.md`](skills/ugc-talking-head/references/troubleshooting.md).
+
+### Limitations
+
+- Whisper drops fillers. `initial_prompt` helps a little and can also invent them. It is not a real "um" detector.
+- auto-editor 29.3.1 has no `--smooth`. This script applies the 0.4s minimum on the v1 timeline. A different build can change flags. The script only passes flags that `--help` accepted on 29.3.1.
+- auto-editor's threshold depends on room tone. If it would delete more than 70% of the clip, the script switches to word gaps.
+- Remotion at a company larger than 3 people needs their paid license. See credits.
+- No Windows support in this phase. A 1080×1920 Remotion render is heavy; the script already passes `--concurrency=1`.
+- The Homebrew install path is written and was not executed on macOS here.
+- The skill does not translate. A Spanish clip stays in Spanish.
+
+### Roadmap (phase 2)
+
+- Premiere and DaVinci through MCP, so the delivery can be a timeline instead of a baked MP4
+- VideoLingo for a dub or a separate translated subtitle pass
+- HeyGen when the source is an avatar rather than a real take
+- Variants and A/B hooks from the same transcript
+- Windows, with paths and an installer that does not assume Homebrew
+
+### Credits and licenses
+
+This repo is MIT. Copyright 2026 Fabián. See `LICENSE`.
+
+| Piece | License | Note |
+| --- | --- | --- |
+| [faster-whisper](https://github.com/SYSTRAN/faster-whisper) | MIT | CPU or GPU transcription |
+| Whisper weights (OpenAI) | MIT | Downloaded at runtime, not committed |
+| [CTranslate2](https://github.com/OpenNMT/CTranslate2) | MIT | faster-whisper backend |
+| [WhisperX](https://github.com/m-bain/whisperX) | BSD-2-Clause | Optional. Alignment needs PyTorch |
+| [auto-editor](https://github.com/WyattBlue/auto-editor) | Unlicense | The repo. Release binaries can pull in other licenses |
+| [FFmpeg](https://ffmpeg.org) | GPL or LGPL depending on the build | Not vendored. A build with libx264 is usually GPL |
+| [Remotion](https://www.remotion.dev/docs/license) | Remotion License, not OSI open source | Free for an individual or a company of up to 3 people, including commercial use. Larger companies need a Company License |
+| [Inter](https://github.com/rsms/inter) | SIL OFL 1.1 | `assets/fonts/`, see `OFL.txt` |
+| React | MIT | Template dependency |
+
+`assets/music/bed.m4a` is an original loop generated with ffmpeg for this repo.
+
+### Publish the GitHub repo
+
+```bash
+# Create an empty repo on github.com, then:
+git remote add origin git@github.com:OWNER/REPO.git
+git push -u origin main
+./scripts/package.sh
+```
+
+Replace `OWNER/REPO` in this page too. After the push:
+
+```bash
+npx skills add OWNER/REPO --skill ugc-talking-head -a claude-code
+```
+
+The zip in `dist/` is what you upload to claude.ai. You do not need a GitHub release for Claude Code.
