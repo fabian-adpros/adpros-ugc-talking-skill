@@ -142,7 +142,7 @@ skills/ugc-talking-head/
 └── template/            # proyecto Remotion
 ```
 
-El repo además tiene `README.md`, `LICENSE`, `install.sh`, `doctor.sh` y `scripts/package.sh`.
+El repo además tiene `README.md`, `LICENSE`, `install.sh`, `doctor.sh`, `scripts/package.sh` y los demos en `examples/demo/`. La plantilla incluye `template/package-lock.json`, `template/public/placeholder.mp4` y `template/public/fonts/Inter-Bold.ttf`. La licencia SIL OFL 1.1 de Inter está en `assets/fonts/OFL.txt`.
 
 ### Pipeline
 
@@ -172,7 +172,7 @@ flowchart TD
 
 ### Demos
 
-En `examples/demo/` hay un MP4 por idioma renderizado con Remotion (`es.mp4`, `en.mp4`) y el mismo corte por FFmpeg (`es-ffmpeg.mp4`, `en-ffmpeg.mp4`). Los clips de origen son sintéticos: voz de gTTS, pausas y muletillas, sobre un fondo 9:16. El PNG de cada uno es un frame con el gancho y el subtítulo activo en amarillo.
+`examples/demo/es.mp4` (9,5 s) y `examples/demo/en.mp4` (7,7 s) son renders técnicos de Remotion 4.0.541 a 1080×1920. Los dos ponen voz TTS sobre un fondo oscuro y muestran el gancho, subtítulos de pocas palabras con la palabra activa en amarillo, y la cama de música. En español el gancho es «Hoy te muestro cómo ahorrar tiempo». En inglés es «Today I'll show you the fastest way». El cuadro es un fondo oscuro: no aparece una persona ni un avatar, y no salen de un clip de celular.
 
 ### Problemas frecuentes
 
@@ -229,7 +229,7 @@ El repositorio es `fabian-adpros/adpros-ugc-talking-skill`. El id del skill sigu
 npx skills add fabian-adpros/adpros-ugc-talking-skill --skill ugc-talking-head -a claude-code
 ```
 
-El zip de `dist/` es el que se sube a claude.ai. No hace falta publicarlo como release para que el skill funcione en Claude Code.
+El zip de `dist/` es el que se sube a claude.ai. `dist/` no se commitea. Al publicar un GitHub Release, `.github/workflows/release.yml` construye ese zip con `scripts/package.sh` y adjunta `ugc-talking-head.zip` y `ugc-talking-head.skill`. Claude Code no necesita el release: instala la carpeta `skills/ugc-talking-head` del repo.
 
 ---
 
@@ -369,7 +369,7 @@ skills/ugc-talking-head/
 └── template/            # Remotion project
 ```
 
-The repo also has `README.md`, `LICENSE`, `install.sh`, `doctor.sh`, and `scripts/package.sh`.
+The repo also has `README.md`, `LICENSE`, `install.sh`, `doctor.sh`, `scripts/package.sh`, and the demos in `examples/demo/`. The template includes `template/package-lock.json`, `template/public/placeholder.mp4`, and `template/public/fonts/Inter-Bold.ttf`. Inter's SIL OFL 1.1 text is `assets/fonts/OFL.txt`.
 
 ### Pipeline
 
@@ -399,7 +399,7 @@ flowchart TD
 
 ### Demos
 
-`examples/demo/` has one Remotion MP4 per language (`es.mp4`, `en.mp4`) and the same cut through FFmpeg (`es-ffmpeg.mp4`, `en-ffmpeg.mp4`). The sources are synthetic: gTTS voice, pauses, and fillers, on a 9:16 background. Each PNG is a frame with the hook and the active caption word in yellow.
+`examples/demo/es.mp4` (9.5 s) and `examples/demo/en.mp4` (7.7 s) are Remotion 4.0.541 technical renders at 1080×1920. Both put TTS speech on a dark background and show the hook, short captions with the active word in yellow, and the music bed. The Spanish hook is «Hoy te muestro cómo ahorrar tiempo». The English hook is «Today I'll show you the fastest way». The frame is a dark background: no person and no avatar appear, and the files are not phone clips.
 
 ### Troubleshooting
 
@@ -456,4 +456,4 @@ The repository is `fabian-adpros/adpros-ugc-talking-skill`. The skill id stays `
 npx skills add fabian-adpros/adpros-ugc-talking-skill --skill ugc-talking-head -a claude-code
 ```
 
-The zip in `dist/` is what you upload to claude.ai. You do not need a GitHub release for Claude Code.
+The zip in `dist/` is what you upload to claude.ai. `dist/` is not committed. Publishing a GitHub Release runs `.github/workflows/release.yml`, which builds that zip with `scripts/package.sh` and attaches `ugc-talking-head.zip` and `ugc-talking-head.skill`. Claude Code does not need the release: it installs the `skills/ugc-talking-head` folder from the repo.

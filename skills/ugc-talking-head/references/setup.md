@@ -7,7 +7,7 @@ What it installs:
 - ffmpeg (Homebrew on macOS, apt on Linux) when it is missing
 - a Python venv at `.venv` inside the skill folder
 - `faster-whisper` and `auto-editor` from `requirements.txt`
-- `npm install` plus `npx remotion browser ensure` in `template/`
+- `npm ci` plus `npx remotion browser ensure` in `template/`
 
 WhisperX is not installed by default. It pulls PyTorch for alignment. Opt in with:
 
