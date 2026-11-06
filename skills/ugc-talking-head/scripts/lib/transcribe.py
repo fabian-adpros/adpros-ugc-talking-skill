@@ -148,7 +148,7 @@ def transcribe_whisperx(
 def _load_wav_16k(path: Path):
     """Load the ffmpeg-produced 16 kHz mono WAV as float32.
 
-    faster-whisper 1.2.1 calls av.open(..., metadata_errors=\"ignore\"). PyAV 19
+    faster-whisper 1.2.1 calls av.open(..., metadata_errors="ignore"). PyAV 19
     dropped that keyword. Feeding a numpy array skips that path. ffmpeg already
     decoded the file.
     """
