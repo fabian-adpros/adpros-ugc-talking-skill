@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Idempotent setup for ugc-talking-head.
+# Idempotent setup for adpros-ugc-talking-skill.
 # Tested on Ubuntu 24.04. The Homebrew branch is for a clean Mac and was not
 # executed on macOS in this repo's own test run.
 set -euo pipefail

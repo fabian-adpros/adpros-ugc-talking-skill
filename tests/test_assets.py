@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SKILL = ROOT / "skills" / "ugc-talking-head"
+SKILL = ROOT / "skills" / "adpros-ugc-talking-skill"
 
 TTF_MAGIC = b"\x00\x01\x00\x00"
 
@@ -37,10 +37,18 @@ def test_package_lock_pins_remotion():
     lock = json.loads(lock_path.read_text(encoding="utf-8"))
     root = lock["packages"][""]
     assert lock["lockfileVersion"] == 3
-    assert lock["name"] == package["name"] == "ugc-talking-head-template"
+    assert lock["name"] == package["name"] == "adpros-ugc-talking-skill-template"
     assert root["dependencies"]["remotion"] == package["dependencies"]["remotion"] == "4.0.541"
     assert root["dependencies"]["@remotion/cli"] == "4.0.541"
     assert len(lock["packages"]) > 10
+
+
+def test_public_skill_id():
+    text = (SKILL / "SKILL.md").read_text(encoding="utf-8")
+    end = text.find("\n---", 4)
+    block = text[4:end]
+    assert "name: adpros-ugc-talking-skill" in block.splitlines()
+    assert 'version: "0.1.1"' in block
 
 
 def test_technical_demos_are_present():

@@ -1,8 +1,11 @@
-# ugc-talking-head
+# adpros-ugc-talking-skill
 
 Un skill de Claude que convierte un clip vertical de talking-head (el típico video de celular, 60–90 s, 9:16) en un MP4 listo para publicar: silencios cortados, muletillas fuera, subtítulos en bloques de 2–3 palabras, un gancho los primeros 3 segundos y una cama de música a unos −18 dB bajo la voz. Inglés y español.
 
 A Claude Agent Skill that turns a raw vertical talking-head clip into a launch-ready MP4: silence and filler cuts, 2–3 word captions, a 3-second hook, and a music bed about −18 dB under the voice. English and Spanish.
+
+Id público: `adpros-ugc-talking-skill`. En Claude Code se invoca con `/adpros-ugc-talking-skill`.
+Public id: `adpros-ugc-talking-skill`. In Claude Code, invoke `/adpros-ugc-talking-skill`.
 
 ---
 
@@ -54,20 +57,20 @@ INSTALL_WHISPERX=1 ./install.sh
 
 ```bash
 mkdir -p ~/.claude/skills
-cp -R skills/ugc-talking-head ~/.claude/skills/ugc-talking-head
+cp -R skills/adpros-ugc-talking-skill ~/.claude/skills/adpros-ugc-talking-skill
 ```
 
 **Claude Code, solo en un proyecto**
 
 ```bash
 mkdir -p .claude/skills
-cp -R skills/ugc-talking-head .claude/skills/ugc-talking-head
+cp -R skills/adpros-ugc-talking-skill .claude/skills/adpros-ugc-talking-skill
 ```
 
 **Desde GitHub, cuando el repo sea público** (`npx skills` busca `skills/*/SKILL.md`):
 
 ```bash
-npx skills add fabian-adpros/adpros-ugc-talking-skill --skill ugc-talking-head -a claude-code
+npx skills add fabian-adpros/adpros-ugc-talking-skill --skill adpros-ugc-talking-skill -a claude-code
 ```
 
 Añade `-g` si lo quieres en tu usuario y no en el proyecto. `-y` evita las preguntas.
@@ -78,9 +81,24 @@ Añade `-g` si lo quieres en tu usuario y no en el proyecto. `-y` evita las preg
 ./scripts/package.sh
 ```
 
-Eso deja `dist/ugc-talking-head.zip` y `dist/ugc-talking-head.skill`. Los dos son el mismo archivo. Dentro, la raíz es la carpeta `ugc-talking-head/` y `SKILL.md` vive ahí. Un zip con `SKILL.md` suelto en la raíz no lo reconoce Claude. Súbelo en Ajustes → Capacidades → Skills.
+Eso deja `dist/adpros-ugc-talking-skill.zip` y `dist/adpros-ugc-talking-skill.skill`. Los dos son el mismo archivo. Dentro, la raíz es la carpeta `adpros-ugc-talking-skill/` y `SKILL.md` vive ahí. Un zip con `SKILL.md` suelto en la raíz no lo reconoce Claude. Súbelo en Ajustes → Capacidades → Skills.
 
 El sandbox de claude.ai no trae ffmpeg ni Whisper. El skill está pensado para Claude Code en una máquina donde ya corriste `install.sh`.
+
+### Migrar desde `ugc-talking-head`
+
+La release [v0.1.0](https://github.com/fabian-adpros/adpros-ugc-talking-skill/releases/tag/v0.1.0) se queda como histórico y no se reemplaza. Si nunca instalaste `ugc-talking-head`, instala solo el id nuevo. Si esa carpeta ya existe, Claude puede descubrir los dos skills: muévela a un lado para desactivarla y conserva cualquier cambio que hayas hecho ahí. Se puede volver a activar moviendo el directorio a su nombre anterior. La invocación nueva es `/adpros-ugc-talking-skill`.
+
+```bash
+# Solo si ya existe una instalación previa. No borra la carpeta.
+if [ -d "$HOME/.claude/skills/ugc-talking-head" ]; then
+  mv "$HOME/.claude/skills/ugc-talking-head" "$HOME/.claude/skills/ugc-talking-head.disabled"
+fi
+if [ -d .claude/skills/ugc-talking-head ]; then
+  mv .claude/skills/ugc-talking-head .claude/skills/ugc-talking-head.disabled
+fi
+npx skills add fabian-adpros/adpros-ugc-talking-skill --skill adpros-ugc-talking-skill -a claude-code -g -y
+```
 
 ### Prompts de ejemplo
 
@@ -100,7 +118,7 @@ English:
 
 ### Configuración
 
-El preset de ejemplo es [`skills/ugc-talking-head/assets/preset.json`](skills/ugc-talking-head/assets/preset.json).
+El preset de ejemplo es [`skills/adpros-ugc-talking-skill/assets/preset.json`](skills/adpros-ugc-talking-skill/assets/preset.json).
 
 | Clave | Default | Qué cambia |
 | --- | --- | --- |
@@ -118,14 +136,14 @@ El preset de ejemplo es [`skills/ugc-talking-head/assets/preset.json`](skills/ug
 | `export.max_duration` | 60 | Tope. Se recorta si `trim_if_over` es true |
 | `export.lufs` | -14 | Loudness integrado |
 
-Las listas de muletillas están en [`assets/fillers.json`](skills/ugc-talking-head/assets/fillers.json). Inglés: um, uh, erm, like, you know, I mean, basically… Español: eh, este, o sea, pues, bueno, mmm, digamos, tipo, ¿me entiendes?… El modo conservador solo corta las claras, y las ambiguas (`este`, `like`, `pues`) únicamente si van solas. El modo agresivo también corta `you know`, `o sea`, `me entiendes` en medio de la frase. Whisper a menudo ni las transcribe: el plan lo dice, no lo escondas.
+Las listas de muletillas están en [`assets/fillers.json`](skills/adpros-ugc-talking-skill/assets/fillers.json). Inglés: um, uh, erm, like, you know, I mean, basically… Español: eh, este, o sea, pues, bueno, mmm, digamos, tipo, ¿me entiendes?… El modo conservador solo corta las claras, y las ambiguas (`este`, `like`, `pues`) únicamente si van solas. El modo agresivo también corta `you know`, `o sea`, `me entiendes` en medio de la frase. Whisper a menudo ni las transcribe: el plan lo dice, no lo escondas.
 
 La cama que viene en el repo es un loop de acordes generado para este proyecto, sin track de terceros. Cámbiala por un archivo del que tengas derechos.
 
 ### Estructura
 
 ```text
-skills/ugc-talking-head/
+skills/adpros-ugc-talking-skill/
 ├── SKILL.md
 ├── install.sh
 ├── doctor.sh
@@ -176,7 +194,7 @@ flowchart TD
 
 ### Problemas frecuentes
 
-`./doctor.sh` primero. Si la transcripción se queda callada la primera vez, está bajando el modelo. Exit 10 no es un fallo: es el checkpoint del gancho. Si el plan dice que no había muletillas en el transcript, Whisper se las comió; no se pueden cortar. Más casos en [`references/troubleshooting.md`](skills/ugc-talking-head/references/troubleshooting.md).
+`./doctor.sh` primero. Si la transcripción se queda callada la primera vez, está bajando el modelo. Exit 10 no es un fallo: es el checkpoint del gancho. Si el plan dice que no había muletillas en el transcript, Whisper se las comió; no se pueden cortar. Más casos en [`references/troubleshooting.md`](skills/adpros-ugc-talking-skill/references/troubleshooting.md).
 
 ### Limitaciones
 
@@ -223,13 +241,13 @@ git push -u origin main
 ./scripts/package.sh
 ```
 
-El repositorio es `fabian-adpros/adpros-ugc-talking-skill`. El id del skill sigue siendo `ugc-talking-head`:
+El repositorio es `fabian-adpros/adpros-ugc-talking-skill`. El id público del skill es `adpros-ugc-talking-skill`:
 
 ```bash
-npx skills add fabian-adpros/adpros-ugc-talking-skill --skill ugc-talking-head -a claude-code
+npx skills add fabian-adpros/adpros-ugc-talking-skill --skill adpros-ugc-talking-skill -a claude-code
 ```
 
-El zip de `dist/` es el que se sube a claude.ai. `dist/` no se commitea. Al publicar un GitHub Release, `.github/workflows/release.yml` construye ese zip con `scripts/package.sh` y adjunta `ugc-talking-head.zip` y `ugc-talking-head.skill`. Claude Code no necesita el release: instala la carpeta `skills/ugc-talking-head` del repo.
+El zip de `dist/` es el que se sube a claude.ai. `dist/` no se commitea. Un tag `v*` nuevo dispara `.github/workflows/release.yml`: si esa release no existe, la crea y adjunta `adpros-ugc-talking-skill.zip` y `adpros-ugc-talking-skill.skill`. No modifica la release v0.1.0. Claude Code instala la carpeta `skills/adpros-ugc-talking-skill` del repo.
 
 ---
 
@@ -281,20 +299,20 @@ INSTALL_WHISPERX=1 ./install.sh
 
 ```bash
 mkdir -p ~/.claude/skills
-cp -R skills/ugc-talking-head ~/.claude/skills/ugc-talking-head
+cp -R skills/adpros-ugc-talking-skill ~/.claude/skills/adpros-ugc-talking-skill
 ```
 
 **Claude Code, this project only**
 
 ```bash
 mkdir -p .claude/skills
-cp -R skills/ugc-talking-head .claude/skills/ugc-talking-head
+cp -R skills/adpros-ugc-talking-skill .claude/skills/adpros-ugc-talking-skill
 ```
 
 **From GitHub, once the repo is public** (`npx skills` looks for `skills/*/SKILL.md`):
 
 ```bash
-npx skills add fabian-adpros/adpros-ugc-talking-skill --skill ugc-talking-head -a claude-code
+npx skills add fabian-adpros/adpros-ugc-talking-skill --skill adpros-ugc-talking-skill -a claude-code
 ```
 
 Add `-g` to install for your user instead of the project. `-y` skips the prompts.
@@ -305,9 +323,24 @@ Add `-g` to install for your user instead of the project. `-y` skips the prompts
 ./scripts/package.sh
 ```
 
-That writes `dist/ugc-talking-head.zip` and `dist/ugc-talking-head.skill`. They are the same archive. The root inside the archive is the `ugc-talking-head/` folder, and `SKILL.md` is inside that folder. A zip with a bare `SKILL.md` at the root is not recognized. Upload it under Settings → Capabilities → Skills.
+That writes `dist/adpros-ugc-talking-skill.zip` and `dist/adpros-ugc-talking-skill.skill`. They are the same archive. The root inside the archive is the `adpros-ugc-talking-skill/` folder, and `SKILL.md` is inside that folder. A zip with a bare `SKILL.md` at the root is not recognized. Upload it under Settings → Capabilities → Skills.
 
 The claude.ai sandbox does not ship ffmpeg or Whisper. Use the skill from Claude Code on a machine where `install.sh` has run.
+
+### Migrate from `ugc-talking-head`
+
+Release [v0.1.0](https://github.com/fabian-adpros/adpros-ugc-talking-skill/releases/tag/v0.1.0) stays as the historical download and is not replaced. If you never installed `ugc-talking-head`, install only the new id. If that folder is already present, Claude can discover both skills: move it aside to disable it, and keep any customizations you made there. Move `ugc-talking-head.disabled` back to `ugc-talking-head` to turn the old copy on again. The new invocation is `/adpros-ugc-talking-skill`.
+
+```bash
+# Only when a previous install exists. This moves the folder; it does not delete it.
+if [ -d "$HOME/.claude/skills/ugc-talking-head" ]; then
+  mv "$HOME/.claude/skills/ugc-talking-head" "$HOME/.claude/skills/ugc-talking-head.disabled"
+fi
+if [ -d .claude/skills/ugc-talking-head ]; then
+  mv .claude/skills/ugc-talking-head .claude/skills/ugc-talking-head.disabled
+fi
+npx skills add fabian-adpros/adpros-ugc-talking-skill --skill adpros-ugc-talking-skill -a claude-code -g -y
+```
 
 ### Example prompts
 
@@ -327,7 +360,7 @@ English:
 
 ### Configuration
 
-The sample preset is [`skills/ugc-talking-head/assets/preset.json`](skills/ugc-talking-head/assets/preset.json).
+The sample preset is [`skills/adpros-ugc-talking-skill/assets/preset.json`](skills/adpros-ugc-talking-skill/assets/preset.json).
 
 | Key | Default | Effect |
 | --- | --- | --- |
@@ -345,14 +378,14 @@ The sample preset is [`skills/ugc-talking-head/assets/preset.json`](skills/ugc-t
 | `export.max_duration` | 60 | Cap. Trimmed when `trim_if_over` is true |
 | `export.lufs` | -14 | Integrated loudness |
 
-Filler lists live in [`assets/fillers.json`](skills/ugc-talking-head/assets/fillers.json). English: um, uh, erm, like, you know, I mean, basically… Spanish: eh, este, o sea, pues, bueno, mmm, digamos, tipo, ¿me entiendes?… Conservative mode cuts clear fillers, and ambiguous ones (`este`, `like`, `pues`) only when they stand alone. Aggressive mode also cuts `you know`, `o sea`, and `me entiendes` mid-sentence. Whisper often never writes them down. The plan says so. Report that, do not claim they were removed.
+Filler lists live in [`assets/fillers.json`](skills/adpros-ugc-talking-skill/assets/fillers.json). English: um, uh, erm, like, you know, I mean, basically… Spanish: eh, este, o sea, pues, bueno, mmm, digamos, tipo, ¿me entiendes?… Conservative mode cuts clear fillers, and ambiguous ones (`este`, `like`, `pues`) only when they stand alone. Aggressive mode also cuts `you know`, `o sea`, and `me entiendes` mid-sentence. Whisper often never writes them down. The plan says so. Report that, do not claim they were removed.
 
 The bed in the repo is an original chord loop generated for this project. Swap it for a file you have rights to.
 
 ### Layout
 
 ```text
-skills/ugc-talking-head/
+skills/adpros-ugc-talking-skill/
 ├── SKILL.md
 ├── install.sh
 ├── doctor.sh
@@ -403,7 +436,7 @@ flowchart TD
 
 ### Troubleshooting
 
-Run `./doctor.sh` first. A quiet first transcription is the model download. Exit code 10 is the hook checkpoint, not a failure. If the plan says the transcript had no fillers, Whisper dropped them and they cannot be cut. More cases are in [`references/troubleshooting.md`](skills/ugc-talking-head/references/troubleshooting.md).
+Run `./doctor.sh` first. A quiet first transcription is the model download. Exit code 10 is the hook checkpoint, not a failure. If the plan says the transcript had no fillers, Whisper dropped them and they cannot be cut. More cases are in [`references/troubleshooting.md`](skills/adpros-ugc-talking-skill/references/troubleshooting.md).
 
 ### Limitations
 
@@ -450,10 +483,10 @@ git push -u origin main
 ./scripts/package.sh
 ```
 
-The repository is `fabian-adpros/adpros-ugc-talking-skill`. The skill id stays `ugc-talking-head`:
+The repository is `fabian-adpros/adpros-ugc-talking-skill`. The public skill id is `adpros-ugc-talking-skill`:
 
 ```bash
-npx skills add fabian-adpros/adpros-ugc-talking-skill --skill ugc-talking-head -a claude-code
+npx skills add fabian-adpros/adpros-ugc-talking-skill --skill adpros-ugc-talking-skill -a claude-code
 ```
 
-The zip in `dist/` is what you upload to claude.ai. `dist/` is not committed. Publishing a GitHub Release runs `.github/workflows/release.yml`, which builds that zip with `scripts/package.sh` and attaches `ugc-talking-head.zip` and `ugc-talking-head.skill`. Claude Code does not need the release: it installs the `skills/ugc-talking-head` folder from the repo.
+The zip in `dist/` is what you upload to claude.ai. `dist/` is not committed. A new `v*` tag runs `.github/workflows/release.yml`: if that release does not exist yet, the workflow creates it and attaches `adpros-ugc-talking-skill.zip` and `adpros-ugc-talking-skill.skill`. It does not modify the v0.1.0 release. Claude Code installs the `skills/adpros-ugc-talking-skill` folder from the repo.
