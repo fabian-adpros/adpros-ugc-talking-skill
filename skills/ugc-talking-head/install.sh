@@ -64,7 +64,7 @@ log "Remotion template"
 if ! have npm; then
   echo "npm is missing. The FFmpeg renderer still works; Remotion will not." >&2
 else
-  (cd "$SKILL_DIR/template" && npm install)
+  (cd "$SKILL_DIR/template" && npm ci)
   (cd "$SKILL_DIR/template" && npx remotion browser ensure)
 fi
 
