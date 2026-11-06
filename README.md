@@ -87,10 +87,16 @@ El sandbox de claude.ai no trae ffmpeg ni Whisper. El skill está pensado para C
 
 ### Migrar desde `ugc-talking-head`
 
-La release [v0.1.0](https://github.com/fabian-adpros/adpros-ugc-talking-skill/releases/tag/v0.1.0) se queda como histórico y no se reemplaza. Si el id viejo sigue instalado, Claude puede descubrir los dos. Quítalo o desactívalo e instala este id. La invocación nueva es `/adpros-ugc-talking-skill`.
+La release [v0.1.0](https://github.com/fabian-adpros/adpros-ugc-talking-skill/releases/tag/v0.1.0) se queda como histórico y no se reemplaza. Si nunca instalaste `ugc-talking-head`, instala solo el id nuevo. Si esa carpeta ya existe, Claude puede descubrir los dos skills: muévela a un lado para desactivarla y conserva cualquier cambio que hayas hecho ahí. Se puede volver a activar moviendo el directorio a su nombre anterior. La invocación nueva es `/adpros-ugc-talking-skill`.
 
 ```bash
-rm -rf ~/.claude/skills/ugc-talking-head .claude/skills/ugc-talking-head
+# Solo si ya existe una instalación previa. No borra la carpeta.
+if [ -d "$HOME/.claude/skills/ugc-talking-head" ]; then
+  mv "$HOME/.claude/skills/ugc-talking-head" "$HOME/.claude/skills/ugc-talking-head.disabled"
+fi
+if [ -d .claude/skills/ugc-talking-head ]; then
+  mv .claude/skills/ugc-talking-head .claude/skills/ugc-talking-head.disabled
+fi
 npx skills add fabian-adpros/adpros-ugc-talking-skill --skill adpros-ugc-talking-skill -a claude-code -g -y
 ```
 
@@ -323,10 +329,16 @@ The claude.ai sandbox does not ship ffmpeg or Whisper. Use the skill from Claude
 
 ### Migrate from `ugc-talking-head`
 
-Release [v0.1.0](https://github.com/fabian-adpros/adpros-ugc-talking-skill/releases/tag/v0.1.0) stays as the historical download and is not replaced. If the old id is still installed, Claude can discover both. Remove or disable it, then install this id. The new invocation is `/adpros-ugc-talking-skill`.
+Release [v0.1.0](https://github.com/fabian-adpros/adpros-ugc-talking-skill/releases/tag/v0.1.0) stays as the historical download and is not replaced. If you never installed `ugc-talking-head`, install only the new id. If that folder is already present, Claude can discover both skills: move it aside to disable it, and keep any customizations you made there. Move `ugc-talking-head.disabled` back to `ugc-talking-head` to turn the old copy on again. The new invocation is `/adpros-ugc-talking-skill`.
 
 ```bash
-rm -rf ~/.claude/skills/ugc-talking-head .claude/skills/ugc-talking-head
+# Only when a previous install exists. This moves the folder; it does not delete it.
+if [ -d "$HOME/.claude/skills/ugc-talking-head" ]; then
+  mv "$HOME/.claude/skills/ugc-talking-head" "$HOME/.claude/skills/ugc-talking-head.disabled"
+fi
+if [ -d .claude/skills/ugc-talking-head ]; then
+  mv .claude/skills/ugc-talking-head .claude/skills/ugc-talking-head.disabled
+fi
 npx skills add fabian-adpros/adpros-ugc-talking-skill --skill adpros-ugc-talking-skill -a claude-code -g -y
 ```
 

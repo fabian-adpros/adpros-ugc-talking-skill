@@ -40,10 +40,16 @@ The skill lives at `skills/adpros-ugc-talking-skill/` so `npx skills add` can fi
 
 ## Migrating from ugc-talking-head
 
-Release v0.1.0 stays as the historical download for the previous id. Remove or disable that installed skill before installing this one, or Claude can discover both.
+Release v0.1.0 stays as the historical download for the previous id. If you never installed `ugc-talking-head`, install only the new id. If that folder is already present, move it aside so Claude does not discover both, and keep any customizations in the moved copy. Move `ugc-talking-head.disabled` back to `ugc-talking-head` to enable the old copy again.
 
 ```bash
-rm -rf ~/.claude/skills/ugc-talking-head .claude/skills/ugc-talking-head
+# Only when a previous install exists. This moves the folder; it does not delete it.
+if [ -d "$HOME/.claude/skills/ugc-talking-head" ]; then
+  mv "$HOME/.claude/skills/ugc-talking-head" "$HOME/.claude/skills/ugc-talking-head.disabled"
+fi
+if [ -d .claude/skills/ugc-talking-head ]; then
+  mv .claude/skills/ugc-talking-head .claude/skills/ugc-talking-head.disabled
+fi
 npx skills add fabian-adpros/adpros-ugc-talking-skill --skill adpros-ugc-talking-skill -a claude-code -g -y
 ```
 
