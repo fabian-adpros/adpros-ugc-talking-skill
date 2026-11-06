@@ -30,10 +30,10 @@ faster-whisper downloads weights on the first transcription, into the Hugging Fa
 - Personal: `~/.claude/skills/ugc-talking-head/`
 - Project: `.claude/skills/ugc-talking-head/`
 
-Copy the `ugc-talking-head` folder, not the zip's parent. From GitHub, once the repo is public:
+Copy the `ugc-talking-head` folder, not the zip's parent. From GitHub:
 
 ```bash
-npx skills add OWNER/REPO --skill ugc-talking-head -a claude-code
+npx skills add fabian-adpros/adpros-ugc-talking-skill --skill ugc-talking-head -a claude-code
 ```
 
 The skill lives at `skills/ugc-talking-head/` so `npx skills add` can find it.
