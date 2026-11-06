@@ -1,0 +1,12 @@
+.venv/
+**/node_modules/
+**/__pycache__/
+**/*.pyc
+dist/
+ugc-out/
+examples/raw/
+**/.DS_Store
+*.log
+skills/ugc-talking-head/template/public/input.mp4
+skills/ugc-talking-head/template/public/music.m4a
+skills/ugc-talking-head/template/out/
