@@ -96,7 +96,10 @@ export const TalkingHead: React.FC<TalkingHeadProps> = (props) => {
         <div
           style={{
             position: 'absolute',
-            top: height * props.style.captionY,
+            top: Math.min(
+              Math.max(height * props.style.captionY, safe.top + props.style.captionSize * 0.55),
+              height - safe.bottom - props.style.captionSize * 0.55,
+            ),
             left: safe.left,
             right: safe.right,
             transform: 'translateY(-50%)',

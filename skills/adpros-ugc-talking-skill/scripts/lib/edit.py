@@ -589,6 +589,37 @@ def hex_to_ass_bgr(color: str) -> str:
     return f"&H00{blue}{green}{red}&".upper()
 
 
+def caption_center(
+    width: int,
+    height: int,
+    y_ratio: float,
+    font_size: int,
+    safe: dict,
+) -> tuple[int, int]:
+    """Pixel center of a caption line.
+
+    `y_ratio` is the requested center as a fraction of the frame height.
+    The result stays inside the safe zone when that zone is tall enough.
+    It does not look for a face.
+    """
+    half = max(1.0, float(font_size) * 0.55)
+    top_limit = float(safe.get("top", 0)) + half
+    bottom_limit = float(height) - float(safe.get("bottom", 0)) - half
+    center = float(y_ratio) * float(height)
+    if bottom_limit >= top_limit:
+        center = min(max(center, top_limit), bottom_limit)
+    else:
+        center = float(height) / 2.0
+    return int(round(width / 2.0)), int(round(center))
+
+
+def hook_anchor(width: int, height: int, y_ratio: float, safe: dict) -> tuple[int, int]:
+    """Top-center of the hook plate, at or below the top safe margin."""
+    y = max(float(safe.get("top", 0)), float(y_ratio) * float(height))
+    y = min(y, max(0.0, float(height) - float(safe.get("bottom", 0)) - 1.0))
+    return int(round(width / 2.0)), int(round(y))
+
+
 def build_ass(
     captions: list[dict],
     font_name: str,
@@ -598,6 +629,11 @@ def build_ass(
     highlight_enabled: bool,
     play_res_x: int = 1080,
     play_res_y: int = 1920,
+    caption_xy: tuple[int, int] | None = None,
+    hook_text: str = "",
+    hook_end: float = 0.0,
+    hook_xy: tuple[int, int] | None = None,
+    hook_font_size: int = 62,
 ) -> str:
     primary = hex_to_ass_bgr(color)
     hi = hex_to_ass_bgr(highlight)
@@ -612,17 +648,35 @@ ScaledBorderAndShadow: yes
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Caption,{font_name},{font_size},{primary},&H000000FF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,8,0,5,80,140,80,1
-
+"""
+    if hook_text and hook_xy and hook_end > 0:
+        header += (
+            f"Style: Hook,{font_name},{int(hook_font_size)},&H00FFFFFF,&H000000FF,"
+            f"&H00000000,&H66000000,-1,0,0,0,100,100,0,0,3,16,0,8,80,140,0,1\n"
+        )
+    header += """
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
     lines = [header.rstrip("\n")]
+    if hook_text and hook_xy and hook_end > 0:
+        hx, hy = hook_xy
+        hooked = ass_escape(hook_text)
+        lines.append(
+            "Dialogue: 1,"
+            + f"{ass_timestamp(0)},{ass_timestamp(hook_end)},Hook,,0,0,0,,"
+            + f"{{\\an8\\pos({hx},{hy})}}{hooked}"
+        )
     for card in captions:
         words = card["words"]
         if not words:
             continue
+        prefix = ""
+        if caption_xy:
+            cx, cy = caption_xy
+            prefix = f"{{\\an5\\pos({cx},{cy})}}"
         if not highlight_enabled:
-            text = ass_escape(" ".join(word["text"] for word in words))
+            text = prefix + ass_escape(" ".join(word["text"] for word in words))
             lines.append(
                 f"Dialogue: 0,{ass_timestamp(card['start'])},{ass_timestamp(card['end'])},Caption,,0,0,0,,{text}"
             )
@@ -639,7 +693,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     parts.append(f"{{\\c{hi}}}{escaped}{{\\c{primary}}}")
                 else:
                     parts.append(escaped)
-            text = " ".join(parts)
+            text = prefix + " ".join(parts)
             lines.append(
                 f"Dialogue: 0,{ass_timestamp(start)},{ass_timestamp(end)},Caption,,0,0,0,,{text}"
             )

@@ -29,7 +29,7 @@ Also present in that help: `--preview` / `--stats`, `--audio-normalize` (`ebu` o
 
 ## ffmpeg 6.1.1
 
-Filters confirmed with `ffmpeg -h filter=...`: `subtitles` (`filename`, `fontsdir`), `drawtext` (`fontfile`, `textfile`, `box`, `enable`), `loudnorm` (`I`, `TP`, `LRA`, `measured_I`, `measured_TP`, `measured_LRA`, `measured_thresh`, `offset`, `print_format`), `sidechaincompress` (`threshold`, `ratio`, `attack`, `release`, `makeup`, `level_sc`), `amix` (`duration`, `normalize`, `dropout_transition`), `volume`, `silencedetect` (`noise`, `d`), `aformat` (`channel_layouts`). Encoders: `libx264`, `aac`.
+Filters confirmed with `ffmpeg -h filter=...` on the Linux ffmpeg used for these fixes: `subtitles` (`filename`, `fontsdir`) burns captions and the hook, `loudnorm` (`I`, `TP`, `LRA`, `measured_I`, `measured_TP`, `measured_LRA`, `measured_thresh`, `offset`, `print_format`), `sidechaincompress` (`threshold`, `ratio`, `attack`, `release`, `makeup`, `level_sc`), `amix` (`duration`, `normalize`, `dropout_transition`), `volume`, `silencedetect` (`noise`, `d`), `aformat` (`channel_layouts` on ffmpeg 6, `channel_layout` when that list is gone), `fps`, `tpad` (`stop_mode=clone`), `apad` (`whole_dur`). Encoders: `libx264`, `aac`. drawtext is not on the hook path.
 
 ## Remotion 4.0.541
 

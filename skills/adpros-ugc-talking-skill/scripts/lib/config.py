@@ -23,7 +23,7 @@ DEFAULTS: dict = {
         "color": "#FFFFFF",
         "highlight_color": "#FFE14A",
         "stroke_color": "#000000",
-        "y_ratio": 0.46,
+        "y_ratio": 0.75,
     },
     "hook": {"duration_seconds": 3.0, "font_size": 62, "y_ratio": 0.16, "max_chars": 42, "max_words": 8},
     "music": {"file": None, "duck_db": -18, "engine": "volume"},

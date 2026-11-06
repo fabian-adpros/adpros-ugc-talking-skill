@@ -129,6 +129,7 @@ El preset de ejemplo es [`skills/adpros-ugc-talking-skill/assets/preset.json`](s
 | `fillers.mode` | `conservative` | `aggressive` quita más frases. Ver `assets/fillers.json` |
 | `captions.max_words` | 3 | Palabras por tarjeta |
 | `captions.highlight_active_word` | true | La palabra activa pasa a amarillo |
+| `captions.y_ratio` | 0.75 | Centro vertical del subtítulo. 0.75 queda en la zona baja segura, por encima de la UI. No busca una cara |
 | `hook.duration_seconds` | 3 | Cuánto dura el texto del gancho |
 | `music.file` | null | `null` usa `assets/music/bed.m4a`. O pasa `--music` |
 | `music.duck_db` | -18 | La cama queda estos dB bajo la voz |
@@ -204,6 +205,7 @@ flowchart TD
 - Remotion en una empresa de más de 3 personas necesita su licencia de pago. Ver créditos.
 - No hay versión de Windows en esta fase. El render de Remotion a 1080×1920 pide RAM; el script usa `--concurrency=1`.
 - La instalación con Homebrew está escrita y no se ejecutó en macOS aquí.
+- El lugar de los subtítulos, el gancho en libass y el candado de sincronía se probaron con ffmpeg en Linux. No se volvieron a correr en macOS.
 - El skill no traduce. Un clip en español sale en español.
 
 ### Roadmap (fase 2)
@@ -371,6 +373,7 @@ The sample preset is [`skills/adpros-ugc-talking-skill/assets/preset.json`](skil
 | `fillers.mode` | `conservative` | `aggressive` removes more phrases. See `assets/fillers.json` |
 | `captions.max_words` | 3 | Words per caption card |
 | `captions.highlight_active_word` | true | The active word turns yellow |
+| `captions.y_ratio` | 0.75 | Vertical center of the caption line. 0.75 sits in the lower safe area, above the UI. It does not look for a face |
 | `hook.duration_seconds` | 3 | How long the hook stays up |
 | `music.file` | null | `null` uses `assets/music/bed.m4a`. Or pass `--music` |
 | `music.duck_db` | -18 | Bed level under the voice |
@@ -446,6 +449,7 @@ Run `./doctor.sh` first. A quiet first transcription is the model download. Exit
 - Remotion at a company larger than 3 people needs their paid license. See credits.
 - No Windows support in this phase. A 1080×1920 Remotion render is heavy; the script already passes `--concurrency=1`.
 - The Homebrew install path is written and was not executed on macOS here.
+- Caption placement, the libass hook, and the sync lock were checked with ffmpeg on Linux. They were not run again on macOS.
 - The skill does not translate. A Spanish clip stays in Spanish.
 
 ### Roadmap (phase 2)

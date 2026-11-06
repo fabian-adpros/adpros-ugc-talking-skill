@@ -23,7 +23,7 @@ faster-whisper downloads weights on the first transcription, into the Hugging Fa
 
 ## doctor
 
-`bash doctor.sh` prints one line per tool. `MISSING` on ffmpeg, ffprobe, libass, drawtext, loudnorm, faster-whisper (when WhisperX is also missing), or the Inter font means the pipeline cannot run. `optional` on WhisperX, auto-editor, or Remotion means a fallback exists.
+`bash doctor.sh` prints one line per tool, including the ffmpeg version. `MISSING` on ffmpeg, ffprobe, libass, loudnorm, faster-whisper (when WhisperX is also missing), or the Inter font means the pipeline cannot run. `optional` on drawtext, WhisperX, auto-editor, or Remotion means a fallback exists. The hook is burned with libass, not drawtext.
 
 ## Where Claude Code loads the skill
 

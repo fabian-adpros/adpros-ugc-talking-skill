@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires ffmpeg (libass, libx264, aac, loudnorm), Python 3.10+, and faster-whisper or WhisperX. auto-editor is the preferred silence engine. Node.js and Remotion are optional; FFmpeg renders if they are missing. CPU or CUDA. English and Spanish. No hosted API.
 metadata:
   author: Fabian
-  version: "0.1.1"
+  version: "0.1.2"
   languages: "en,es"
 ---
 
@@ -81,7 +81,7 @@ Read [references/hook.md](references/hook.md) before you replace the suggestion.
 
 - Fillers: `conservative`. Use `--mode aggressive` only when the user asks to strip more (`agresivo`, `quita todas las muletillas`, `aggressive`).
 - Silence: longer than 0.4s, 0.05s of padding on each side. Engine `auto` uses auto-editor when it is installed, otherwise word gaps.
-- Captions: 2–3 words, centered, active word in yellow.
+- Captions: 2–3 words in the lower safe area, horizontally centered, active word in yellow. `captions.y_ratio` moves the line. The default is 0.75. This does not detect a face.
 - Hook on screen for the first 3 seconds.
 - Music bed at about −18 dB under the voice. The shipped bed is `assets/music/bed.m4a`. Replace it with `--music`.
 - Export: 1080x1920, H.264 + AAC, about −14 LUFS. Over 60s is trimmed unless `--no-trim`.
