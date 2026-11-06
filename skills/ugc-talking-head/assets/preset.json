@@ -1,0 +1,59 @@
+{
+  "silence": {
+    "min_seconds": 0.4,
+    "padding_seconds": 0.05,
+    "engine": "auto",
+    "audio_threshold": 0.04,
+    "analysis_fps": 100
+  },
+  "fillers": {
+    "mode": "conservative"
+  },
+  "captions": {
+    "min_words": 2,
+    "max_words": 3,
+    "highlight_active_word": true,
+    "font_size": 72,
+    "color": "#FFFFFF",
+    "highlight_color": "#FFE14A",
+    "stroke_color": "#000000",
+    "y_ratio": 0.46
+  },
+  "hook": {
+    "duration_seconds": 3.0,
+    "font_size": 62,
+    "y_ratio": 0.16,
+    "max_chars": 42,
+    "max_words": 8
+  },
+  "music": {
+    "file": null,
+    "duck_db": -18,
+    "engine": "volume"
+  },
+  "export": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "crf": 18,
+    "audio_bitrate": "192k",
+    "lufs": -14,
+    "true_peak": -1.5,
+    "lra": 11,
+    "max_duration": 60,
+    "trim_if_over": true
+  },
+  "safe_zone": {
+    "top": 250,
+    "bottom": 420,
+    "left": 80,
+    "right": 140
+  },
+  "transcription": {
+    "engine": "auto",
+    "model": null,
+    "device": "auto",
+    "vad_filter": false,
+    "beam_size": 5
+  }
+}

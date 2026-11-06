@@ -1,0 +1,50 @@
+{
+  "en": {
+    "clear": [
+      {"tokens": ["um"], "standalone": false},
+      {"tokens": ["uh"], "standalone": false},
+      {"tokens": ["erm"], "standalone": false},
+      {"tokens": ["hmm"], "standalone": false},
+      {"tokens": ["mm"], "standalone": false},
+      {"tokens": ["mmm"], "standalone": false},
+      {"tokens": ["you", "know"], "standalone": true},
+      {"tokens": ["i", "mean"], "standalone": true}
+    ],
+    "aggressive": [
+      {"tokens": ["you", "know"], "standalone": false},
+      {"tokens": ["i", "mean"], "standalone": false},
+      {"tokens": ["like"], "standalone": true},
+      {"tokens": ["basically"], "standalone": true},
+      {"tokens": ["actually"], "standalone": true},
+      {"tokens": ["literally"], "standalone": true},
+      {"tokens": ["so"], "standalone": true},
+      {"tokens": ["right"], "standalone": true},
+      {"tokens": ["kind", "of"], "standalone": true},
+      {"tokens": ["sort", "of"], "standalone": true}
+    ]
+  },
+  "es": {
+    "clear": [
+      {"tokens": ["eh"], "standalone": false},
+      {"tokens": ["eee"], "standalone": false},
+      {"tokens": ["mmm"], "standalone": false},
+      {"tokens": ["mm"], "standalone": false},
+      {"tokens": ["este"], "standalone": true},
+      {"tokens": ["o", "sea"], "standalone": true},
+      {"tokens": ["pues"], "standalone": true},
+      {"tokens": ["bueno"], "standalone": true},
+      {"tokens": ["digamos"], "standalone": true},
+      {"tokens": ["tipo"], "standalone": true},
+      {"tokens": ["me", "entiendes"], "standalone": true}
+    ],
+    "aggressive": [
+      {"tokens": ["o", "sea"], "standalone": false},
+      {"tokens": ["me", "entiendes"], "standalone": false},
+      {"tokens": ["digamos"], "standalone": false},
+      {"tokens": ["sabes"], "standalone": true},
+      {"tokens": ["entonces"], "standalone": true},
+      {"tokens": ["la", "verdad"], "standalone": true},
+      {"tokens": ["verdad"], "standalone": true}
+    ]
+  }
+}
