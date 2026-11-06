@@ -29,6 +29,7 @@ from lib.media import (  # noqa: E402
     auto_editor_v1,
     extract_frame,
     ffmpeg_has_filter,
+    ffmpeg_version,
     loudnorm_stats,
     probe,
     trim_media,
@@ -99,7 +100,14 @@ def _silence_from_auto_editor(src: Path, workdir: Path, words: list[dict], durat
             fps=int(silence["analysis_fps"]),
         )
     except UGCError as exc:
-        warnings.append(f"auto-editor failed ({exc.en}); silence cuts come from word gaps.")
+        detail = exc.en.lower()
+        if "decoder" in detail or "hevc" in detail or "h265" in detail or "h.265" in detail:
+            warnings.append(
+                "auto-editor could not decode this video (common with iPhone HEVC). "
+                "Silence cuts come from word gaps."
+            )
+        else:
+            warnings.append(f"auto-editor failed ({exc.en}); silence cuts come from word gaps.")
         return None, warnings
     cuts = auto_editor_chunks_to_cuts(
         payload.get("chunks") or [],
@@ -462,7 +470,8 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     add("ffmpeg", bool(which("ffmpeg")), which("ffmpeg") or "missing", True)
     add("ffprobe", bool(which("ffprobe")), which("ffprobe") or "missing", True)
     add("libass", ffmpeg_has_filter("ass"), "subtitles/ass filter", True)
-    add("drawtext", ffmpeg_has_filter("drawtext"), "hook overlay", True)
+    add("drawtext", ffmpeg_has_filter("drawtext"), "not used for the hook; libass burns it", False)
+    add("ffmpeg version", True, ffmpeg_version(), False)
     add("loudnorm", ffmpeg_has_filter("loudnorm"), "EBU R128", True)
     add("sidechaincompress", ffmpeg_has_filter("sidechaincompress"), "optional duck", False)
     device, compute = detect_device()

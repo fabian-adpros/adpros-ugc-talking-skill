@@ -26,7 +26,7 @@ const defaultProps: TalkingHeadProps = {
     hookSize: 62,
     color: '#FFFFFF',
     highlightColor: '#FFE14A',
-    captionY: 0.46,
+    captionY: 0.75,
     hookY: 0.16,
     safe: {top: 250, bottom: 420, left: 80, right: 140},
   },

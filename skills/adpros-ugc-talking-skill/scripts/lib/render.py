@@ -9,16 +9,22 @@ from pathlib import Path
 
 from .config import font_path
 from .util import skill_root
-from .edit import build_ass
-from .media import loop_music, probe, run_cmd
+from .edit import build_ass, caption_center, hook_anchor
+from .media import audio_format_clause, ffmpeg_version, loop_music, probe, run_cmd
 from .util import UGCError, dump_json
 
 
-def _scale_clause(width: int, height: int, fps: int) -> str:
+def segment_frames(start: float, end: float, fps: int) -> tuple[int, float]:
+    """Whole output frames that cover one kept range, and that duration in seconds."""
+    span = max(0.0, float(end) - float(start))
+    frames = max(1, int(round(span * fps)))
+    return frames, frames / float(fps)
+
+
+def _scale_clause(width: int, height: int) -> str:
     return (
         f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
-        f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=black,"
-        f"setsar=1,fps={fps},format=yuv420p"
+        f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1"
     )
 
 
@@ -38,18 +44,27 @@ def cut_video(
             "El corte se quedó sin video. Afloja las muletillas o el umbral de silencio.",
         )
     dest.parent.mkdir(parents=True, exist_ok=True)
-    scale = _scale_clause(width, height, fps)
+    scale = _scale_clause(width, height)
+    audio_format = audio_format_clause()
     parts: list[str] = []
     labels: list[str] = []
     for index, block in enumerate(ranges):
-        start = f"{block['src_start']:.3f}"
-        end = f"{block['src_end']:.3f}"
+        start = float(block["src_start"])
+        end = float(block["src_end"])
+        _frames, exact = segment_frames(start, end, fps)
+        exact_text = f"{exact:.6f}"
+        # Video and audio are each forced to the same frame-quantized duration.
+        # The fps filter on variable-frame-rate phone video otherwise ends each
+        # slice on a different timestamp from atrim, and concat accumulates that.
         parts.append(
-            f"[0:v]trim=start={start}:end={end},setpts=PTS-STARTPTS,{scale}[v{index}]"
+            f"[0:v]trim=start={start:.6f}:end={end:.6f},setpts=PTS-STARTPTS,{scale},"
+            f"fps={fps}:round=near,tpad=stop_mode=clone:stop_duration=1,"
+            f"trim=duration={exact_text},setpts=PTS-STARTPTS,format=yuv420p[v{index}]"
         )
         parts.append(
-            f"[0:a]atrim=start={start}:end={end},asetpts=PTS-STARTPTS,"
-            f"aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo[a{index}]"
+            f"[0:a]atrim=start={start:.6f}:end={end:.6f},asetpts=PTS-STARTPTS,"
+            f"aresample=48000,{audio_format},apad=whole_dur={exact_text},"
+            f"atrim=duration={exact_text},asetpts=PTS-STARTPTS[a{index}]"
         )
         labels.append(f"[v{index}][a{index}]")
     parts.append(f"{''.join(labels)}concat=n={len(ranges)}:v=1:a=1[v][a]")
@@ -57,6 +72,8 @@ def cut_video(
         [
             "ffmpeg",
             "-y",
+            "-fflags",
+            "+genpts",
             "-i",
             str(src),
             "-filter_complex",
@@ -131,7 +148,23 @@ def style_ffmpeg(
     hook_cfg = preset["hook"]
     export = preset["export"]
     safe = preset["safe_zone"]
+    width = int(export["width"])
+    height = int(export["height"])
     family = _font_family(font_path())
+    hook_text = (plan.get("hook") or {}).get("text") or ""
+    hook_end = float((plan.get("hook") or {}).get("end") or hook_cfg["duration_seconds"])
+    hook_size = int(hook_cfg["font_size"])
+    usable = width - int(safe["left"]) - int(safe["right"])
+    chars_per_line = max(12, int(usable / (hook_size * 0.62)))
+    hook_wrapped = _wrap_hook(hook_text, chars_per_line) if hook_text else ""
+    caption_xy = caption_center(
+        width,
+        height,
+        float(captions_cfg["y_ratio"]),
+        int(captions_cfg["font_size"]),
+        safe,
+    )
+    hook_xy = hook_anchor(width, height, float(hook_cfg["y_ratio"]), safe) if hook_wrapped else None
     ass = build_ass(
         plan["captions"],
         font_name=family,
@@ -139,9 +172,15 @@ def style_ffmpeg(
         color=captions_cfg["color"],
         highlight=captions_cfg["highlight_color"],
         highlight_enabled=bool(captions_cfg["highlight_active_word"]),
-        play_res_x=int(export["width"]),
-        play_res_y=int(export["height"]),
+        play_res_x=width,
+        play_res_y=height,
+        caption_xy=caption_xy,
+        hook_text=hook_wrapped,
+        hook_end=hook_end,
+        hook_xy=hook_xy,
+        hook_font_size=hook_size,
     )
+    workdir.mkdir(parents=True, exist_ok=True)
     ass_path = workdir / "captions.ass"
     ass_path.write_text(ass, encoding="utf-8")
     fonts_dir = workdir / "fonts"
@@ -149,38 +188,13 @@ def style_ffmpeg(
     dest_font = fonts_dir / font_path().name
     if not dest_font.exists():
         shutil.copyfile(font_path(), dest_font)
-    hook_file = workdir / "hook.txt"
-    hook_text = (plan.get("hook") or {}).get("text") or ""
-    hook_size = int(hook_cfg["font_size"])
-    usable = int(export["width"]) - int(safe["left"]) - int(safe["right"])
-    # Inter Bold is roughly 0.62em wide. Wrap so the plate stays inside the safe zone.
-    chars_per_line = max(12, int(usable / (hook_size * 0.62)))
-    hook_wrapped = _wrap_hook(hook_text, chars_per_line)
-    hook_file.write_text(hook_wrapped, encoding="utf-8")
-
-    video_filters = [
-        f"subtitles={_ff_filter_path(ass_path)}:fontsdir={_ff_filter_path(fonts_dir)}"
-    ]
-    if hook_text:
-        hook_end = float(hook_cfg["duration_seconds"])
-        y_ratio = float(hook_cfg["y_ratio"])
-        # y sits just under the top safe margin (safe_zone.top).
-        y_expr = f"max({int(safe['top'])}\\,h*{y_ratio})"
-        video_filters.append(
-            "drawtext="
-            f"fontfile={_ff_filter_path(dest_font)}:"
-            f"textfile={_ff_filter_path(hook_file)}:"
-            f"fontsize={hook_size}:"
-            "fontcolor=white:borderw=6:bordercolor=black:"
-            "box=1:boxcolor=black@0.55:boxborderw=16:"
-            "line_spacing=6:text_align=center:"
-            "x=(w-text_w)/2:"
-            f"y={y_expr}:"
-            f"enable='between(t,0,{hook_end:.3f})'"
-        )
-    video = ",".join(video_filters)
+    # The hook is a libass dialogue, same pass as the captions. drawtext's
+    # text_align/enable syntax differs across ffmpeg builds and can drop the
+    # plate while libass captions still render.
+    video = f"subtitles={_ff_filter_path(ass_path)}:fontsdir={_ff_filter_path(fonts_dir)}"
     duck = float(preset["music"]["duck_db"])
     engine = preset["music"].get("engine", "volume")
+    packed = audio_format_clause().replace("aformat=", "aformat=sample_rates=48000:")
     cmd = ["ffmpeg", "-y", "-i", str(cut)]
     if music:
         cmd += ["-stream_loop", "-1", "-i", str(music)]
@@ -188,17 +202,15 @@ def style_ffmpeg(
             # Bed starts at the requested duck, then sidechaincompress pulls it
             # down further while the voice is loud and lets it back up in gaps.
             audio = (
-                f"[1:a]aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,"
-                f"volume={duck}dB[bed];"
+                f"[1:a]{packed},volume={duck}dB[bed];"
                 f"[0:a]asplit=2[voice][sc];"
                 f"[bed][sc]sidechaincompress=threshold=0.05:ratio=8:attack=20:release=300:makeup=1[ducked];"
                 f"[voice][ducked]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[a]"
             )
         else:
             audio = (
-                f"[1:a]aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,"
-                f"volume={duck}dB[bed];"
-                f"[0:a]aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo[voice];"
+                f"[1:a]{packed},volume={duck}dB[bed];"
+                f"[0:a]{packed}[voice];"
                 f"[voice][bed]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[a]"
             )
         filter_complex = f"[0:v]{video}[v];{audio}"
@@ -229,8 +241,22 @@ def style_ffmpeg(
         "+faststart",
         str(dest),
     ]
+    if hook_text and "Dialogue: 1," not in ass:
+        raise UGCError(
+            "The hook text was set but it was not written into the caption file.",
+            "Había gancho, pero no se escribió en el archivo de subtítulos.",
+        )
     run_cmd(cmd)
-    return {"renderer": "ffmpeg", "music": str(music) if music else None, "duck_db": duck, "music_engine": engine if music else None}
+    return {
+        "renderer": "ffmpeg",
+        "music": str(music) if music else None,
+        "duck_db": duck,
+        "music_engine": engine if music else None,
+        "hook": "libass" if hook_text else None,
+        "caption_xy": list(caption_xy),
+        "hook_xy": list(hook_xy) if hook_xy else None,
+        "ffmpeg": ffmpeg_version(),
+    }
 
 
 def _font_family(path: Path) -> str:
@@ -280,11 +306,16 @@ def style_remotion(cut: Path, dest: Path, plan: dict, preset: dict, music: Path 
     duration = float(probe(cut)["duration"])
     captions = preset["captions"]
     hook_cfg = preset["hook"]
+    width = int(preset["export"]["width"])
+    height = int(preset["export"]["height"])
+    safe = preset["safe_zone"]
+    center = caption_center(width, height, float(captions["y_ratio"]), int(captions["font_size"]), safe)
     hook = dict(plan.get("hook") or {})
     if hook.get("text"):
-        usable = int(preset["export"]["width"]) - int(preset["safe_zone"]["left"]) - int(preset["safe_zone"]["right"])
+        usable = width - int(safe["left"]) - int(safe["right"])
         chars = max(12, int(usable / (int(hook_cfg["font_size"]) * 0.62)))
         hook["text"] = _wrap_hook(hook["text"], chars)
+    hook_top = hook_anchor(width, height, float(hook_cfg["y_ratio"]), safe)[1] if hook.get("text") else None
     props = {
         "videoSrc": "input.mp4",
         "musicSrc": music_name,
@@ -299,8 +330,8 @@ def style_remotion(cut: Path, dest: Path, plan: dict, preset: dict, music: Path 
             "hookSize": int(hook_cfg["font_size"]),
             "color": captions["color"],
             "highlightColor": captions["highlight_color"],
-            "captionY": float(captions["y_ratio"]),
-            "hookY": float(hook_cfg["y_ratio"]),
+            "captionY": center[1] / height,
+            "hookY": (hook_top / height) if hook_top is not None else float(hook_cfg["y_ratio"]),
             "safe": preset["safe_zone"],
         },
     }

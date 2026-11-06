@@ -312,3 +312,38 @@ def ffmpeg_has_filter(name: str) -> bool:
         check=False,
     )
     return f" {name} " in (completed.stdout or "")
+
+
+def ffmpeg_version() -> str:
+    if not shutil.which("ffmpeg"):
+        return "missing"
+    completed = subprocess.run(
+        ["ffmpeg", "-version"],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    line = (completed.stdout or completed.stderr or "").splitlines()
+    return line[0] if line else "unknown"
+
+
+def ffmpeg_filter_help(name: str) -> str:
+    if not shutil.which("ffmpeg"):
+        return ""
+    completed = subprocess.run(
+        ["ffmpeg", "-hide_banner", "-h", f"filter={name}"],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    return (completed.stdout or "") + (completed.stderr or "")
+
+
+def audio_format_clause() -> str:
+    """Stereo packed float. ffmpeg 7 renamed channel_layouts to channel_layout."""
+    help_text = ffmpeg_filter_help("aformat")
+    if "channel_layouts" in help_text:
+        layout = "channel_layouts=stereo"
+    else:
+        layout = "channel_layout=stereo"
+    return f"aformat=sample_fmts=fltp:{layout}"

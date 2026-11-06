@@ -19,6 +19,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
@@ -52,9 +54,11 @@ jobs:
             exit 0
           fi
           if ! gh release view "$tag" >/dev/null 2>&1; then
-            gh release create "$tag" \
-              --title "$tag" \
-              --notes "Public skill id: adpros-ugc-talking-skill. Invoke /adpros-ugc-talking-skill. Archive root: adpros-ugc-talking-skill/SKILL.md. Release v0.1.0 stays historical."
+            notes="$(git for-each-ref "refs/tags/${tag}" --format='%(contents)')"
+            if [ -z "$notes" ]; then
+              notes="Public skill id: adpros-ugc-talking-skill. Archive root: adpros-ugc-talking-skill/SKILL.md."
+            fi
+            gh release create "$tag" --title "$tag" --notes "$notes"
           fi
           gh release upload "$tag" \
             dist/adpros-ugc-talking-skill.zip \
