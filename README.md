@@ -34,8 +34,8 @@ WhisperX es opcional. auto-editor es el motor de silencios preferido; si no est�
 ### Instalación en 5 minutos
 
 ```bash
-git clone https://github.com/OWNER/REPO.git
-cd REPO
+git clone https://github.com/fabian-adpros/adpros-ugc-talking-skill.git
+cd adpros-ugc-talking-skill
 ./install.sh
 ./doctor.sh
 ```
@@ -67,7 +67,7 @@ cp -R skills/ugc-talking-head .claude/skills/ugc-talking-head
 **Desde GitHub, cuando el repo sea público** (`npx skills` busca `skills/*/SKILL.md`):
 
 ```bash
-npx skills add OWNER/REPO --skill ugc-talking-head -a claude-code
+npx skills add fabian-adpros/adpros-ugc-talking-skill --skill ugc-talking-head -a claude-code
 ```
 
 Añade `-g` si lo quieres en tu usuario y no en el proyecto. `-y` evita las preguntas.
@@ -218,15 +218,15 @@ La cama `assets/music/bed.m4a` es un loop original generado con ffmpeg para este
 
 ```bash
 # En github.com crea un repo vacío. Luego:
-git remote add origin git@github.com:OWNER/REPO.git
+git remote add origin git@github.com:fabian-adpros/adpros-ugc-talking-skill.git
 git push -u origin main
 ./scripts/package.sh
 ```
 
-Sustituye `OWNER/REPO` también en esta página. A partir de ahí:
+El repositorio es `fabian-adpros/adpros-ugc-talking-skill`. El id del skill sigue siendo `ugc-talking-head`:
 
 ```bash
-npx skills add OWNER/REPO --skill ugc-talking-head -a claude-code
+npx skills add fabian-adpros/adpros-ugc-talking-skill --skill ugc-talking-head -a claude-code
 ```
 
 El zip de `dist/` es el que se sube a claude.ai. No hace falta publicarlo como release para que el skill funcione en Claude Code.
@@ -261,8 +261,8 @@ WhisperX is optional. auto-editor is the preferred silence engine. Without it, c
 ### Install in 5 minutes
 
 ```bash
-git clone https://github.com/OWNER/REPO.git
-cd REPO
+git clone https://github.com/fabian-adpros/adpros-ugc-talking-skill.git
+cd adpros-ugc-talking-skill
 ./install.sh
 ./doctor.sh
 ```
@@ -294,7 +294,7 @@ cp -R skills/ugc-talking-head .claude/skills/ugc-talking-head
 **From GitHub, once the repo is public** (`npx skills` looks for `skills/*/SKILL.md`):
 
 ```bash
-npx skills add OWNER/REPO --skill ugc-talking-head -a claude-code
+npx skills add fabian-adpros/adpros-ugc-talking-skill --skill ugc-talking-head -a claude-code
 ```
 
 Add `-g` to install for your user instead of the project. `-y` skips the prompts.
@@ -445,15 +445,15 @@ This repo is MIT. Copyright 2026 Fabián. See `LICENSE`.
 
 ```bash
 # Create an empty repo on github.com, then:
-git remote add origin git@github.com:OWNER/REPO.git
+git remote add origin git@github.com:fabian-adpros/adpros-ugc-talking-skill.git
 git push -u origin main
 ./scripts/package.sh
 ```
 
-Replace `OWNER/REPO` in this page too. After the push:
+The repository is `fabian-adpros/adpros-ugc-talking-skill`. The skill id stays `ugc-talking-head`:
 
 ```bash
-npx skills add OWNER/REPO --skill ugc-talking-head -a claude-code
+npx skills add fabian-adpros/adpros-ugc-talking-skill --skill ugc-talking-head -a claude-code
 ```
 
 The zip in `dist/` is what you upload to claude.ai. You do not need a GitHub release for Claude Code.
