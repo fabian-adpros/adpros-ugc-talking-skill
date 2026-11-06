@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1] / "skills" / "ugc-talking-head" / "scripts"
+ROOT = Path(__file__).resolve().parents[1] / "skills" / "adpros-ugc-talking-skill" / "scripts"
 sys.path.insert(0, str(ROOT))
 
 from lib.config import load_fillers  # noqa: E402

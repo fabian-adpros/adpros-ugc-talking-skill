@@ -1,15 +1,17 @@
 ---
-name: ugc-talking-head
+name: adpros-ugc-talking-skill
 description: "Turn a raw 60-90s vertical 9:16 UGC talking-head phone clip into a launch-ready 1080x1920 MP4 with word-level captions, silence and filler cuts, a 3-second hook, and a ducked music bed. English and Spanish. Use when the user says edit this clip, talking head, UGC, captions, subtitles, remove silences, remove filler words, Reels, TikTok, launch-ready, edita este video, edita este clip, cabeza parlante, subtítulos, quita los silencios, quita las muletillas, gancho, or déjalo listo para publicar."
 license: MIT
 compatibility: Requires ffmpeg (libass, libx264, aac, loudnorm), Python 3.10+, and faster-whisper or WhisperX. auto-editor is the preferred silence engine. Node.js and Remotion are optional; FFmpeg renders if they are missing. CPU or CUDA. English and Spanish. No hosted API.
 metadata:
   author: Fabian
-  version: "1.0.0"
+  version: "0.1.1"
   languages: "en,es"
 ---
 
 # UGC talking head
+
+Public skill id: `adpros-ugc-talking-skill`. Invoke it with `/adpros-ugc-talking-skill`.
 
 Reply in the user's language. Spanish in, Spanish out. English in, English out. The clip's language is separate: captions, fillers, and the hook stay in the language spoken on camera.
 

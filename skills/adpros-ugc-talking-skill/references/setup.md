@@ -27,19 +27,28 @@ faster-whisper downloads weights on the first transcription, into the Hugging Fa
 
 ## Where Claude Code loads the skill
 
-- Personal: `~/.claude/skills/ugc-talking-head/`
-- Project: `.claude/skills/ugc-talking-head/`
+- Personal: `~/.claude/skills/adpros-ugc-talking-skill/`
+- Project: `.claude/skills/adpros-ugc-talking-skill/`
 
-Copy the `ugc-talking-head` folder, not the zip's parent. From GitHub:
+Copy the `adpros-ugc-talking-skill` folder, not the zip's parent. From GitHub:
 
 ```bash
-npx skills add fabian-adpros/adpros-ugc-talking-skill --skill ugc-talking-head -a claude-code
+npx skills add fabian-adpros/adpros-ugc-talking-skill --skill adpros-ugc-talking-skill -a claude-code
 ```
 
-The skill lives at `skills/ugc-talking-head/` so `npx skills add` can find it.
+The skill lives at `skills/adpros-ugc-talking-skill/` so `npx skills add` can find it. Invoke it with `/adpros-ugc-talking-skill`.
+
+## Migrating from ugc-talking-head
+
+Release v0.1.0 stays as the historical download for the previous id. Remove or disable that installed skill before installing this one, or Claude can discover both.
+
+```bash
+rm -rf ~/.claude/skills/ugc-talking-head .claude/skills/ugc-talking-head
+npx skills add fabian-adpros/adpros-ugc-talking-skill --skill adpros-ugc-talking-skill -a claude-code -g -y
+```
 
 ## claude.ai
 
-Upload `dist/ugc-talking-head.zip` from Settings → Capabilities → Skills. The archive root is the folder `ugc-talking-head/`, and `SKILL.md` is inside it. A zip whose root is `SKILL.md` itself is ignored. Build it with `scripts/package.sh` from the repo. `dist/ugc-talking-head.skill` is the same zip with the other extension.
+Upload `dist/adpros-ugc-talking-skill.zip` from Settings → Capabilities → Skills. The archive root is the folder `adpros-ugc-talking-skill/`, and `SKILL.md` is inside it. A zip whose root is `SKILL.md` itself is ignored. Build it with `scripts/package.sh` from the repo. `dist/adpros-ugc-talking-skill.skill` is the same zip with the other extension.
 
 claude.ai's code sandbox may not have ffmpeg, Whisper, or Node. This skill is meant for Claude Code on a machine where `install.sh` has run. In chat, say so instead of pretending the render happened.
