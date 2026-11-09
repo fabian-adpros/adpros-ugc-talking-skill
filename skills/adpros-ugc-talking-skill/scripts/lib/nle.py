@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from .config import default_music_path, load_preset
@@ -15,7 +16,8 @@ from .media import auto_editor_available, probe, run_cmd
 from .storyboard import cut_out_frames, write_storyboard
 from .util import UGCError, dump_json, load_json
 
-NLE_CHOICES = ("all", "premiere", "fcpx", "otio", "edl")
+NLE_CHOICES = ("all", "none", "premiere", "fcpx", "resolve", "capcut", "otio", "edl")
+EDITORS = ("premiere", "fcpx", "resolve", "capcut", "otio", "edl")
 
 
 def _auto_editor_version(exe: str) -> tuple[int, int, int]:
@@ -91,6 +93,110 @@ def conform_cfr(src: Path, dest: Path, width: int, height: int, fps: int, crf: i
     )
 
 
+def parse_editors(value: str) -> set[str]:
+    text = (value or "").strip().lower()
+    if text in {"", "none", "no", "off"}:
+        return set()
+    if text in {"all", "*"}:
+        return set(EDITORS)
+    aliases = {
+        "finalcut": "fcpx",
+        "final-cut": "fcpx",
+        "final_cut": "fcpx",
+        "davinci": "resolve",
+        "davinci-resolve": "resolve",
+        "fcpxml": "fcpx",
+    }
+    chosen: set[str] = set()
+    for part in text.split(","):
+        name = aliases.get(part.strip(), part.strip())
+        if not name:
+            continue
+        if name not in EDITORS:
+            raise UGCError(
+                f"Unknown editor {part!r}. Use {', '.join(NLE_CHOICES)}.",
+                f"Editor desconocido {part!r}. Usa {', '.join(NLE_CHOICES)}.",
+            )
+        chosen.add(name)
+    return chosen
+
+
+def _time_seconds(value: str) -> float:
+    text = (value or "0s").strip()
+    if text.endswith("s"):
+        text = text[:-1]
+    if "/" in text:
+        num, den = text.split("/", 1)
+        return int(num) / int(den)
+    return float(text)
+
+
+def conformed_frames(path: Path, fps: int) -> int:
+    completed = run_cmd(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=nb_frames,duration",
+            "-of",
+            "json",
+            str(path),
+        ]
+    )
+    import json
+
+    data = json.loads(completed.stdout or "{}")
+    stream = (data.get("streams") or [{}])[0]
+    frames = stream.get("nb_frames")
+    if frames not in (None, "", "N/A"):
+        return int(frames)
+    return max(1, int(round(float(stream.get("duration") or 0) * fps)))
+
+
+def repair_fcpxml(path: Path, source_frames: int, fps: int) -> str:
+    """Point the asset at the full conformed file and prefer FCPXML 1.10.
+
+    auto-editor 29 writes version 1.11 and sets the asset duration to the
+    edited timeline, so a later source clip can start past that duration.
+    It has no version= flag. The elements it emits validate as 1.10 once the
+    version attribute is 1.10, which Resolve 18/19 import.
+    """
+    tree = ET.parse(path)
+    root = tree.getroot()
+    if root.tag != "fcpxml":
+        raise UGCError("final-cut-pro export was not FCPXML.", "La exportación final-cut-pro no es FCPXML.")
+    duration = f"{source_frames}/{fps}s"
+    limit = source_frames / float(fps)
+    for asset in root.iter("asset"):
+        asset.set("duration", duration)
+    for element in root.iter():
+        if element.tag == "asset":
+            continue
+        if "duration" in element.attrib and element.tag == "format":
+            element.set("duration", duration)
+    for clip in list(root.iter("asset-clip")) + list(root.iter("audio")) + list(root.iter("video")):
+        if "start" not in clip.attrib and "duration" not in clip.attrib:
+            continue
+        if clip.tag not in {"asset-clip", "clip", "audio", "video", "title"}:
+            continue
+        start = _time_seconds(clip.get("start") or "0s")
+        span = _time_seconds(clip.get("duration") or "0s")
+        if start + span > limit + (0.5 / fps):
+            raise UGCError(
+                f"{clip.tag} starts at {start:.3f}s and lasts {span:.3f}s, past the {limit:.3f}s source.",
+                f"{clip.tag} empieza en {start:.3f}s y dura {span:.3f}s, fuera de los {limit:.3f}s del origen.",
+            )
+    # Apple's 1.10 DTD accepts this document when version is 1.10.
+    # The DTD is copyright Apple, so it is not vendored. The check was run
+    # locally against that DTD; CI checks well-formedness and the duration math.
+    root.set("version", "1.10")
+    tree.write(path, encoding="utf-8", xml_declaration=True)
+    return "1.10"
+
+
 def _rewrite_media_paths(path: Path, absolute: Path, relative: str) -> None:
     text = path.read_text(encoding="utf-8")
     absolute_text = str(absolute.resolve())
@@ -134,11 +240,19 @@ def _run_auto_editor(exe: str, media: Path, cuts: list[tuple[int, int]], fps: in
 
 
 def otio_available() -> bool:
+    return otio_version() is not None
+
+
+def otio_version() -> str | None:
     try:
-        import opentimelineio  # noqa: F401
+        import opentimelineio as otio
     except ImportError:
-        return False
-    return True
+        return None
+    version = getattr(otio, "__version__", None)
+    if version:
+        return str(version)
+    nested = getattr(otio, "version", None)
+    return str(getattr(nested, "__version__", "installed"))
 
 
 def otio_adapter(name: str) -> bool:
@@ -267,8 +381,7 @@ def _fallback_xml(story: dict, export: Path, adapter: str, dest: Path, notes: li
 
 
 def export_nle(workdir: Path, which: str, preset: dict | None = None) -> dict:
-    if which not in NLE_CHOICES:
-        raise UGCError(f"Unknown --nle {which}.", f"--nle desconocido: {which}.")
+    chosen = parse_editors(which)
     preset = preset or load_preset(None)
     export = workdir / "export"
     story_path = export / "storyboard.json"
@@ -298,9 +411,12 @@ def export_nle(workdir: Path, which: str, preset: dict | None = None) -> dict:
     if final.exists():
         shutil.copyfile(final, media / "preview.mp4")
     cuts = cut_out_frames(float(probe(conformed)["duration"]), story["tracks"]["video"], fps)
-    targets = set(NLE_CHOICES[1:]) if which == "all" else {which}
+    targets = chosen
+    if not targets:
+        return {"written": [], "notes": ["No editor project requested."], "cut_out": cuts, "fcpxml": None}
     notes: list[str] = []
     written: list[str] = []
+    fcpxml_version = None
     exe = auto_editor_available()
     if exe:
         major = _auto_editor_version(exe)[0]
@@ -320,15 +436,13 @@ def export_nle(workdir: Path, which: str, preset: dict | None = None) -> dict:
             )
         else:
             written.append(dest.name)
-    if "fcpx" in targets:
+    if "fcpx" in targets or "resolve" in targets:
         dest = export / "project.fcpxml"
         if exe:
             _run_auto_editor(exe, conformed, cuts, fps, "final-cut-pro", dest)
             _rewrite_media_paths(dest, conformed, "media/source.mp4")
+            fcpxml_version = repair_fcpxml(dest, conformed_frames(conformed, fps), fps)
             written.append(dest.name)
-            text = dest.read_text(encoding="utf-8")
-            if "<fcpxml" not in text:
-                raise UGCError("final-cut-pro export was not FCPXML.", "La exportación final-cut-pro no es FCPXML.")
         elif not _fallback_xml(story, export, "fcpx_xml", dest, notes):
             raise UGCError(
                 "FCPXML export needs auto-editor 29 or the otio-fcpx-xml-adapter fallback.",
@@ -341,5 +455,12 @@ def export_nle(workdir: Path, which: str, preset: dict | None = None) -> dict:
         for name in ("timeline.otio", "project.edl"):
             if (export / name).exists() and name not in written:
                 written.append(name)
-    dump_json(export / "nle.json", {"written": written, "notes": notes, "cut_out_frames": cuts, "fcpxml": "1.11"})
+    if (export / "project.fcpxml").exists() and not fcpxml_version:
+        fcpxml_version = repair_fcpxml(export / "project.fcpxml", conformed_frames(conformed, fps), fps)
+    if "capcut" in targets:
+        notes.append("CapCut has no project file. Use media/source.mp4, media/music.m4a, captions.srt, and hook.srt.")
+        for name in ("media/source.mp4", "captions.srt", "hook.srt"):
+            if name not in written:
+                written.append(name)
+    dump_json(export / "nle.json", {"written": written, "notes": notes, "cut_out_frames": cuts, "fcpxml": fcpxml_version})
     return {"written": written, "notes": notes, "cut_out": cuts}

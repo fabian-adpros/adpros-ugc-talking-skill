@@ -72,7 +72,7 @@ fi
 if [[ "$WITH_OTIO" == "1" ]]; then
   log "Optional OpenTimelineIO adapters"
   "$SKILL_DIR/.venv/bin/pip" install \
-    'opentimelineio>=0.17,<0.18' \
+    'opentimelineio>=0.17,<0.19' \
     'otio-cmx3600-adapter' \
     'otio-fcp-adapter' \
     'otio-fcpx-xml-adapter' \

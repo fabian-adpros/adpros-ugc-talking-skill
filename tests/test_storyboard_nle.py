@@ -192,7 +192,7 @@ def test_premiere_xml_is_not_fcpxml_and_files_are_well_formed(tmp_path: Path):
     assert "<xmeml" in premiere
     assert "<fcpxml" not in premiere
     assert "<fcpxml" in fcpx
-    assert 'version="1.11"' in fcpx
+    assert 'version="1.10"' in fcpx
     assert "media/source.mp4" in premiere
     assert "media/source.mp4" in fcpx
     for name in ("project_premiere.xml", "project.fcpxml"):
@@ -206,6 +206,91 @@ def test_premiere_xml_is_not_fcpxml_and_files_are_well_formed(tmp_path: Path):
     assert (export / "media" / "music.m4a").exists()
     assert "project_premiere.xml" in result["written"]
     assert "project.fcpxml" in result["written"]
+
+
+@pytest.mark.skipif(shutil.which("auto-editor") is None, reason="auto-editor 29 is not installed")
+def test_fcpxml_asset_covers_a_clip_near_the_end(tmp_path: Path):
+    source = tmp_path / "long.mp4"
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=0x224466:s=320x180:r=30:d=6",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440:sample_rate=48000:duration=6",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "34",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-shortest",
+            str(source),
+        ],
+        check=True,
+    )
+    work = tmp_path / "work"
+    work.mkdir()
+    plan = _plan(source)
+    plan["source_duration"] = 6.0
+    plan["kept_ranges"] = [
+        {"src_start": 0.2, "src_end": 0.8, "dst_start": 0.0, "dst_end": 0.6},
+        {"src_start": 5.2, "src_end": 5.9, "dst_start": 0.6, "dst_end": 1.3},
+    ]
+    (work / "plan.json").write_text(json.dumps(plan), encoding="utf-8")
+    preset = json.loads(json.dumps(DEFAULTS))
+    preset["export"]["width"] = 320
+    preset["export"]["height"] = 180
+    preset["export"]["crf"] = 34
+    export_nle(work, "fcpx", preset)
+    root = ET.parse(work / "export" / "project.fcpxml").getroot()
+    assert root.get("version") == "1.10"
+    asset = root.find(".//asset")
+    assert asset is not None
+    asset_seconds = _rational(asset.get("duration"))
+    probed = json.loads(
+        subprocess.check_output(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "stream=nb_frames",
+                "-of",
+                "json",
+                str(work / "export" / "media" / "source.mp4"),
+            ],
+            text=True,
+        )
+    )
+    frames = int(probed["streams"][0]["nb_frames"])
+    assert abs(asset_seconds - frames / 30) < 1 / 30
+    for clip in root.iter("asset-clip"):
+        start = _rational(clip.get("start"))
+        duration = _rational(clip.get("duration"))
+        assert start + duration <= asset_seconds + 1 / 30
+
+
+def _rational(value: str) -> float:
+    text = value[:-1] if value.endswith("s") else value
+    if "/" in text:
+        num, den = text.split("/", 1)
+        return int(num) / int(den)
+    return float(text)
 
 
 def test_otio_round_trip_when_installed(tmp_path: Path):

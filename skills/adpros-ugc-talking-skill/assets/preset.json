@@ -49,6 +49,11 @@
     "left": 80,
     "right": 140
   },
+  "delivery": {
+    "editor_projects": false,
+    "editors": ["premiere", "fcpx", "resolve"],
+    "review_storyboard": false
+  },
   "transcription": {
     "engine": "auto",
     "model": null,

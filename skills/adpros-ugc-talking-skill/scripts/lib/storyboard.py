@@ -433,15 +433,15 @@ Archivo → Importar `project_premiere.xml` (XML de FCP 7 / xmeml, escrito por a
 
 ## DaVinci Resolve
 
-File → Import → Timeline, or File → Import AAF/XML, and choose `project.fcpxml`. Auto-editor 29 writes FCPXML 1.11. Relink to `media/source.mp4`. Add `media/music.m4a` on its own track. Subtitle → Import Subtitle for the SRT files.
+File → Import → Timeline, or File → Import AAF/XML, and choose `project.fcpxml` (FCPXML 1.10). The asset duration is the full conformed source, not the edited length. Relink to `media/source.mp4`. Add `media/music.m4a` on its own track. Subtitle → Import Subtitle for the SRT files.
 
-Archivo → Importar → Timeline, o Archivo → Importar AAF/XML, y elige `project.fcpxml`. auto-editor 29 escribe FCPXML 1.11. Reconecta `media/source.mp4`. Añade `media/music.m4a` en su pista. Subtítulos → Importar subtítulo para los SRT.
+Archivo → Importar → Timeline, o Archivo → Importar AAF/XML, y elige `project.fcpxml` (FCPXML 1.10). La duración del asset es el origen conformado completo, no el corte. Reconecta `media/source.mp4`. Añade `media/music.m4a` en su pista. Subtítulos → Importar subtítulo para los SRT.
 
 ## Final Cut Pro
 
-File → Import → XML and choose `project.fcpxml` (FCPXML 1.11 from auto-editor 29). Relink to `media/source.mp4`. The music bed is `media/music.m4a`. Import the SRT files if your Final Cut version accepts them, or use them as a reference while you type titles.
+File → Import → XML and choose `project.fcpxml` (FCPXML 1.10). Relink to `media/source.mp4`. The music bed is `media/music.m4a`. Import the SRT files if your Final Cut version accepts them, or use them as a reference while you type titles.
 
-Archivo → Importar → XML y elige `project.fcpxml` (FCPXML 1.11 de auto-editor 29). Reconecta `media/source.mp4`. La cama es `media/music.m4a`. Importa los SRT si tu versión de Final Cut los acepta, o úsalos de referencia.
+Archivo → Importar → XML y elige `project.fcpxml` (FCPXML 1.10). Reconecta `media/source.mp4`. La cama es `media/music.m4a`. Importa los SRT si tu versión de Final Cut los acepta, o úsalos de referencia.
 
 ## CapCut Desktop
 
@@ -459,6 +459,8 @@ def write_storyboard(workdir: Path, preset: dict | None = None, vision_path: Pat
     preset = preset or load_preset(None)
     vision = _load_vision(vision_path)
     story = build_storyboard(plan, preset, vision)
+    if plan.get("delivery"):
+        story["delivery"] = plan["delivery"]
     source = Path(str(plan.get("source") or ""))
     if not source.exists():
         raise UGCError(f"Source video is missing: {source}", f"No está el video de origen: {source}")

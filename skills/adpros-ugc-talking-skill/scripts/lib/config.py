@@ -40,6 +40,11 @@ DEFAULTS: dict = {
         "trim_if_over": True,
     },
     "safe_zone": {"top": 250, "bottom": 420, "left": 80, "right": 140},
+    "delivery": {
+        "editor_projects": False,
+        "editors": ["premiere", "fcpx", "resolve"],
+        "review_storyboard": False,
+    },
     "transcription": {
         "engine": "auto",
         "model": None,

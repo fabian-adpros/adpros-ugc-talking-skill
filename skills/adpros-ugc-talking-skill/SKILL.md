@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires ffmpeg (libass, libx264, aac, loudnorm), Python 3.10+, and faster-whisper or WhisperX. auto-editor is the preferred silence engine. Node.js and Remotion are optional; FFmpeg renders if they are missing. CPU or CUDA. English and Spanish. No hosted API.
 metadata:
   author: Fabian
-  version: "0.2.0"
+  version: "0.2.1"
   languages: "en,es"
 ---
 
@@ -60,7 +60,26 @@ Optional vision labels, only after you have looked at the thumbnails (still fram
 {"labels":[{"index":1,"label":"product_visible","confidence":"high","evidence":"A bottle is visible in keep_001.jpg."}]}
 ```
 
-5. After they say yes (or they already said "sin preguntar" / "just export it"), render and export:
+5. After the hook is approved, ask three delivery questions before rendering. Do not invent the answers. Exit 11 is that checkpoint, not a failure. `--yes` skips it and uses `delivery` in `preset.json` (editor projects off unless the preset says otherwise).
+
+Ask, in the user's language:
+
+- Do you want editor project files at the end?
+- Which editors? Premiere, Final Cut, DaVinci Resolve, CapCut (media and SRT only; no project file), OTIO, EDL. Several are allowed.
+- Review the storyboard before exporting?
+
+Then re-run with their choices:
+
+```bash
+"$PY" "$SKILL_DIR/scripts/ugc_edit.py" run "$CLIP" \
+  --workdir "$WORKDIR" --from render --nle premiere,fcpx,resolve --review-storyboard --ui es
+```
+
+`--nle none --no-review-storyboard` means no project files and no storyboard stop. The answers are stored on `plan.json` and copied into `storyboard.json`, so a later run does not ask again.
+
+6. Exit 12 means the storyboard is ready for review. Show `export/storyboard.html` and `export/contact-sheet.jpg`. Wait for approval. Then continue with `--storyboard-yes`. Do not export the NLE files before that.
+
+7. After they say yes (or they already said "sin preguntar" / "just export it"), render and export:
 
 ```bash
 "$PY" "$SKILL_DIR/scripts/ugc_edit.py" run "$CLIP" \
@@ -69,14 +88,16 @@ Optional vision labels, only after you have looked at the thumbnails (still fram
 
 Omit `--hook` to keep the suggested line. `--renderer ffmpeg` forces the fallback. The default tries Remotion, then FFmpeg.
 
-6. Report `final.mp4`: resolution, duration, LUFS, and the frame PNG. Repeat every warning from `plan.json`, especially fillers the transcript never contained.
-7. Write the editor package. `export/` is part of the delivery, next to `final.mp4`.
+8. Report `final.mp4`: resolution, duration, LUFS, and the frame PNG. Repeat every warning from `plan.json`, especially fillers the transcript never contained.
+9. If they asked for editor files, `export/` is part of the delivery, next to `final.mp4`. `run` writes only the chosen targets after the loudness export. You can also call export directly:
 
 ```bash
 "$PY" "$SKILL_DIR/scripts/ugc_edit.py" export --workdir "$WORKDIR" --nle all
 ```
 
-`--nle` is `all`, `premiere`, `fcpx`, `otio`, or `edl`. `all` writes every format that is installed. Premiere is `project_premiere.xml` (FCP 7 xmeml from auto-editor 29, not FCPXML). Final Cut and Resolve share `project.fcpxml` (FCPXML 1.11, the version auto-editor 29 emits). `timeline.otio` and `project.edl` need `./install.sh --with-otio`. Without those packages the MP4, the storyboard, and the auto-editor XML files still work. Read `export/RELINK.md` before telling the user which file to open.
+`--nle` is a comma-separated list, `all`, or `none`. `premiere` is `project_premiere.xml` (FCP 7 xmeml, not FCPXML). `fcpx` and `resolve` share `project.fcpxml` (FCPXML 1.10; the asset duration is the full conformed source). `capcut` copies media and SRT only. `otio` and `edl` need `./install.sh --with-otio` (`opentimelineio>=0.17,<0.19`, so Python 3.13 can use the 0.18 wheel). Read `export/RELINK.md` before telling the user which file to open.
+
+Exit 10 is the hook. Exit 11 is the delivery questionnaire. Exit 12 is the storyboard review. None of them is a crash.
 
 Details live in the reference files. Open only the one you need.
 
