@@ -49,6 +49,11 @@
     "left": 80,
     "right": 140
   },
+  "storyboard": {
+    "inline": false,
+    "inline_max_bytes": 1500000,
+    "thumb_width": 320
+  },
   "delivery": {
     "editor_projects": false,
     "editors": ["premiere", "fcpx", "resolve"],

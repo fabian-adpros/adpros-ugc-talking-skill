@@ -40,6 +40,7 @@ DEFAULTS: dict = {
         "trim_if_over": True,
     },
     "safe_zone": {"top": 250, "bottom": 420, "left": 80, "right": 140},
+    "storyboard": {"inline": False, "inline_max_bytes": 1_500_000, "thumb_width": 320},
     "delivery": {
         "editor_projects": False,
         "editors": ["premiere", "fcpx", "resolve"],
