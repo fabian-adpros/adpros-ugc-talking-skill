@@ -54,7 +54,11 @@ jobs:
             exit 0
           fi
           if ! gh release view "$tag" >/dev/null 2>&1; then
-            notes="$(git for-each-ref "refs/tags/${tag}" --format='%(contents)')"
+            if git cat-file -t "$tag" 2>/dev/null | grep -qx tag; then
+              notes="$(git cat-file -p "$tag" | awk 'BEGIN{n=0} /^$/{n++; next} n>=1 {print}')"
+            else
+              notes="$(git for-each-ref "refs/tags/${tag}" --format='%(contents)')"
+            fi
             if [ -z "$notes" ]; then
               notes="Public skill id: adpros-ugc-talking-skill. Archive root: adpros-ugc-talking-skill/SKILL.md."
             fi

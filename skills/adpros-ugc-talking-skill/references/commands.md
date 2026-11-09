@@ -31,6 +31,8 @@ Also present in that help: `--preview` / `--stats`, `--audio-normalize` (`ebu` o
 
 Filters confirmed with `ffmpeg -h filter=...` on the Linux ffmpeg used for these fixes: `subtitles` (`filename`, `fontsdir`) burns captions and the hook, `loudnorm` (`I`, `TP`, `LRA`, `measured_I`, `measured_TP`, `measured_LRA`, `measured_thresh`, `offset`, `print_format`), `sidechaincompress` (`threshold`, `ratio`, `attack`, `release`, `makeup`, `level_sc`), `amix` (`duration`, `normalize`, `dropout_transition`), `volume`, `silencedetect` (`noise`, `d`), `aformat` (`channel_layouts` on ffmpeg 6, `channel_layout` when that list is gone), `fps`, `tpad` (`stop_mode=clone`), `apad` (`whole_dur`). Encoders: `libx264`, `aac`. drawtext is not on the hook path.
 
+auto-editor 29.3.1 `--help` (this repo pins `>=29,<30`) accepts `--edit none`, `--margin 0`, `--frame-rate N`, repeated `--cut-out START,END` with integer frames, `--export premiere` (FCP 7 xmeml), and `--export final-cut-pro` (FCPXML 1.11). It does not accept `edl`, `otio`, `resolve-fcp7`, `premiere-otio`, or `version=`. Those are not passed.
+
 ## Remotion 4.0.541
 
 `npx remotion render --help` lists `--props`, `--codec`, `--pixel-format`, `--crf`, `--concurrency`, `--disallow-parallel-encoding`, `--log`. Chrome for the render is installed with `npx remotion browser ensure`.

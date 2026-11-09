@@ -130,6 +130,8 @@ El preset de ejemplo es [`skills/adpros-ugc-talking-skill/assets/preset.json`](s
 | `captions.max_words` | 3 | Palabras por tarjeta |
 | `captions.highlight_active_word` | true | La palabra activa pasa a amarillo |
 | `captions.y_ratio` | 0.75 | Centro vertical del subtítulo. 0.75 queda en la zona baja segura, por encima de la UI. No busca una cara |
+
+Después del plan, `python scripts/ugc_edit.py storyboard --workdir DIR` escribe `DIR/export/` (guion gráfico, miniaturas, SRT). `python scripts/ugc_edit.py export --workdir DIR --nle all` añade `project_premiere.xml` (XML de FCP 7, no FCPXML), `project.fcpxml` (FCPXML 1.11 de auto-editor 29) y, si instalaste `./install.sh --with-otio`, `timeline.otio` y `project.edl`. El video de origen se conforma a fps constantes antes de esos proyectos.
 | `hook.duration_seconds` | 3 | Cuánto dura el texto del gancho |
 | `music.file` | null | `null` usa `assets/music/bed.m4a`. O pasa `--music` |
 | `music.duck_db` | -18 | La cama queda estos dB bajo la voz |
@@ -374,6 +376,8 @@ The sample preset is [`skills/adpros-ugc-talking-skill/assets/preset.json`](skil
 | `captions.max_words` | 3 | Words per caption card |
 | `captions.highlight_active_word` | true | The active word turns yellow |
 | `captions.y_ratio` | 0.75 | Vertical center of the caption line. 0.75 sits in the lower safe area, above the UI. It does not look for a face |
+
+After the plan, `python scripts/ugc_edit.py storyboard --workdir DIR` writes `DIR/export/` (storyboard, thumbnails, SRT). `python scripts/ugc_edit.py export --workdir DIR --nle all` adds `project_premiere.xml` (FCP 7 XML, not FCPXML), `project.fcpxml` (FCPXML 1.11 from auto-editor 29) and, if you installed with `./install.sh --with-otio`, `timeline.otio` and `project.edl`. The source is conformed to a constant frame rate before those projects.
 | `hook.duration_seconds` | 3 | How long the hook stays up |
 | `music.file` | null | `null` uses `assets/music/bed.m4a`. Or pass `--music` |
 | `music.duck_db` | -18 | Bed level under the voice |

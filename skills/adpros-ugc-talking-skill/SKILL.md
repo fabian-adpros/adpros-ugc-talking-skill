@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires ffmpeg (libass, libx264, aac, loudnorm), Python 3.10+, and faster-whisper or WhisperX. auto-editor is the preferred silence engine. Node.js and Remotion are optional; FFmpeg renders if they are missing. CPU or CUDA. English and Spanish. No hosted API.
 metadata:
   author: Fabian
-  version: "0.1.2"
+  version: "0.2.0"
   languages: "en,es"
 ---
 
@@ -41,7 +41,26 @@ PY="${SKILL_DIR}/.venv/bin/python"
 `--ui` is the user's language (`es` or `en`), not the clip's language. `--lang auto` detects the clip. Pass `--lang es` or `--lang en` when the user already told you. Exit code 10 means the plan is ready and you must stop.
 
 3. Show the user the printed plan: duration before and after, silence cuts, fillers actually removed, the hook, one alternate, and every warning. Ask them to confirm the hook or send a different line. Do not render on exit 10.
-4. After they say yes (or they already said "sin preguntar" / "just export it"), render and export:
+4. After they confirm, write the storyboard. This does not render the final video.
+
+```bash
+"$PY" "$SKILL_DIR/scripts/ugc_edit.py" storyboard --workdir "$WORKDIR" --ui es
+```
+
+That fills `$WORKDIR/export/` with `storyboard.json`, `storyboard.html`, `storyboard.csv`, `thumbs/keep_NNN.jpg`, `contact-sheet.jpg`, `captions.srt`, `hook.srt`, and `RELINK.md`. The SRT files are in edited-timeline time.
+
+Optional vision labels, only after you have looked at the thumbnails (still frames, not the video). Write `labels.json` with a closed set: `talking_head`, `product_visible`, `product_reveal`, `hands`, `screen_or_laptop`, `text_on_screen`, `environment`, `unclear`. Confidence is `low`, `medium`, or `high`, plus a short `evidence` string that names what you actually see in that JPEG. A `low` confidence `product_reveal` does not become a marker. Then:
+
+```bash
+"$PY" "$SKILL_DIR/scripts/ugc_edit.py" storyboard \
+  --workdir "$WORKDIR" --vision-labels "$WORKDIR/labels.json"
+```
+
+```json
+{"labels":[{"index":1,"label":"product_visible","confidence":"high","evidence":"A bottle is visible in keep_001.jpg."}]}
+```
+
+5. After they say yes (or they already said "sin preguntar" / "just export it"), render and export:
 
 ```bash
 "$PY" "$SKILL_DIR/scripts/ugc_edit.py" run "$CLIP" \
@@ -50,7 +69,14 @@ PY="${SKILL_DIR}/.venv/bin/python"
 
 Omit `--hook` to keep the suggested line. `--renderer ffmpeg` forces the fallback. The default tries Remotion, then FFmpeg.
 
-5. Report `final.mp4`: resolution, duration, LUFS, and the frame PNG. Repeat every warning from `plan.json`, especially fillers the transcript never contained.
+6. Report `final.mp4`: resolution, duration, LUFS, and the frame PNG. Repeat every warning from `plan.json`, especially fillers the transcript never contained.
+7. Write the editor package. `export/` is part of the delivery, next to `final.mp4`.
+
+```bash
+"$PY" "$SKILL_DIR/scripts/ugc_edit.py" export --workdir "$WORKDIR" --nle all
+```
+
+`--nle` is `all`, `premiere`, `fcpx`, `otio`, or `edl`. `all` writes every format that is installed. Premiere is `project_premiere.xml` (FCP 7 xmeml from auto-editor 29, not FCPXML). Final Cut and Resolve share `project.fcpxml` (FCPXML 1.11, the version auto-editor 29 emits). `timeline.otio` and `project.edl` need `./install.sh --with-otio`. Without those packages the MP4, the storyboard, and the auto-editor XML files still work. Read `export/RELINK.md` before telling the user which file to open.
 
 Details live in the reference files. Open only the one you need.
 

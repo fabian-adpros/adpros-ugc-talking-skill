@@ -60,6 +60,25 @@ if [[ "${INSTALL_WHISPERX:-0}" == "1" ]]; then
   "$SKILL_DIR/.venv/bin/pip" install whisperx || echo "WhisperX did not install. faster-whisper remains the fallback."
 fi
 
+WITH_OTIO=0
+for arg in "$@"; do
+  if [[ "$arg" == "--with-otio" ]]; then
+    WITH_OTIO=1
+  fi
+done
+if [[ "${INSTALL_OTIO:-0}" == "1" ]]; then
+  WITH_OTIO=1
+fi
+if [[ "$WITH_OTIO" == "1" ]]; then
+  log "Optional OpenTimelineIO adapters"
+  "$SKILL_DIR/.venv/bin/pip" install \
+    'opentimelineio>=0.17,<0.18' \
+    'otio-cmx3600-adapter' \
+    'otio-fcp-adapter' \
+    'otio-fcpx-xml-adapter' \
+    || echo "OpenTimelineIO extras did not fully install. Premiere and FCPXML via auto-editor still work."
+fi
+
 log "Remotion template"
 if ! have npm; then
   echo "npm is missing. The FFmpeg renderer still works; Remotion will not." >&2
@@ -82,6 +101,8 @@ Activate the venv when you call the pipeline yourself:
   python scripts/ugc_edit.py doctor
 
 WhisperX is optional. Install it with INSTALL_WHISPERX=1 ./install.sh
+OpenTimelineIO is optional. Install it with ./install.sh --with-otio
+The OpenTimelineIO-Plugins meta-package does not include otio-fcpx-xml-adapter, so --with-otio installs that adapter by name.
 ffmpeg is the caption fallback when Node or Remotion is missing.
 auto-editor is the silence engine when it is installed; word gaps are the fallback.
 
