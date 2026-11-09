@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.2
+
+- `storyboard --inline` writes `storyboard.inline.html`: one file, inline CSS, JPEG thumbnails as data URIs, no network. The local `storyboard.html` plus `thumbs/` stays the default. `storyboard.md` is a chat summary.
+- The inline page stays under `storyboard.inline_max_bytes` by shrinking or dropping thumbnails. Showing it as a Claude.ai artifact was not verified.
+
 ## 0.2.1
 
 - FCPXML asset duration is the full conformed source, and the file is marked 1.10 so a clip near the end of an iPhone file stays inside the asset.

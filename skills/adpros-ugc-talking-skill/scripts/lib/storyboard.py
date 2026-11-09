@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import base64
 import csv
 import html
 import json
+import subprocess
 from pathlib import Path
 
 from .config import default_music_path, load_preset
@@ -311,7 +313,143 @@ def _bar(segments: list[tuple[float, float, str]], duration: float) -> str:
     return "".join(pieces)
 
 
-def _html(story: dict) -> str:
+def _clip_text(story: dict, clip: dict) -> str:
+    bits = []
+    for card in story["overlays"]["captions"]:
+        if float(card["end"]) > float(clip["dst_start"]) and float(card["start"]) < float(clip["dst_end"]):
+            bits.append(" ".join((word.get("text") or "") for word in card.get("words") or []).strip())
+    return " ".join(bit for bit in bits if bit)
+
+
+def _markdown(story: dict) -> str:
+    hook = story["overlays"]["hook"] or {}
+    delivery = story.get("delivery") or {}
+    editors = delivery.get("editors") or []
+    targets = ", ".join(editors) if editors else "not chosen yet · aún no elegidos"
+    rows = []
+    for clip in story["tracks"]["video"]:
+        rows.append(
+            f"| {clip['index']} | {clip['src_start']:.2f}–{clip['src_end']:.2f}s | "
+            f"{clip['dst_start']:.2f}–{clip['dst_end']:.2f}s | {_clip_text(story, clip)} |"
+        )
+    cut_rows = []
+    for cut in story["cuts"]:
+        duration = float(cut["end"]) - float(cut["start"])
+        label = cut["reason"]
+        if cut.get("text"):
+            label = f"{label}: {cut['text']}"
+        cut_rows.append(f"| {label} | {float(cut['start']):.2f} | {float(cut['end']):.2f} | {duration:.2f}s |")
+    source = float(story["source_duration"] or 0)
+    output = float(story["output_duration"] or 0)
+    bar = ["·"] * 48
+    if source > 0:
+        for clip in story["tracks"]["video"]:
+            start = int(float(clip["src_start"]) / source * 48)
+            end = max(start + 1, int(float(clip["src_end"]) / source * 48))
+            for index in range(start, min(48, end)):
+                bar[index] = "█"
+        for cut in story["cuts"]:
+            glyph = "▒" if cut["reason"] == "filler" else "░"
+            start = int(float(cut["start"]) / source * 48)
+            end = max(start + 1, int(float(cut["end"]) / source * 48))
+            for index in range(start, min(48, end)):
+                if bar[index] == "·":
+                    bar[index] = glyph
+    table = "\n".join(rows) if rows else "| — | — | — | — |"
+    cuts = "\n".join(cut_rows) if cut_rows else "| — | — | — | — |"
+    return f"""# Storyboard · Guion gráfico
+
+- Source / Fuente: {source:.2f}s
+- Output / Salida: {output:.2f}s
+- Hook / Gancho: {hook.get("text") or "—"}
+- Captions / Subtítulos: {len(story["overlays"]["captions"])}
+- Export targets / Destinos: {targets}
+
+## Kept segments · Tomas conservadas
+
+| # | src in–out | dst in–out | text |
+| --- | --- | --- | --- |
+{table}
+
+## Cuts · Cortes
+
+| reason · motivo | start | end | duration |
+| --- | --- | --- | --- |
+{cuts}
+
+## Timeline · Línea de tiempo
+
+`{''.join(bar)}`
+
+█ keep/conservado · ░ silence/silencio · ▒ filler/muletilla · · empty/vacío
+"""
+
+
+def _jpeg_bytes(path: Path, width: int, quality: int) -> bytes:
+    completed = subprocess.run(
+        [
+            "ffmpeg",
+            "-v",
+            "error",
+            "-i",
+            str(path),
+            "-vf",
+            f"scale={int(width)}:-2",
+            "-q:v",
+            str(int(quality)),
+            "-f",
+            "image2",
+            "-vcodec",
+            "mjpeg",
+            "pipe:1",
+        ],
+        check=True,
+        capture_output=True,
+    )
+    return completed.stdout
+
+
+def _fit_inline_images(story: dict, thumb_dir: Path, max_bytes: int, thumb_width: int) -> tuple[dict[int, str], str]:
+    clips = list(story["tracks"]["video"])
+    widths = []
+    for width in (thumb_width, 240, 160, 96):
+        if width <= thumb_width and width not in widths:
+            widths.append(width)
+    note = (
+        "Some thumbnails were omitted to stay under the size cap. "
+        "/ Algunas miniaturas se omitieron para no pasar el tope de tamaño."
+    )
+
+    def encode(width: int, quality: int, chosen: list[dict]) -> dict[int, str]:
+        images = {}
+        for clip in chosen:
+            jpg = thumb_dir / f"keep_{clip['index']:03d}.jpg"
+            if not jpg.exists():
+                continue
+            raw = _jpeg_bytes(jpg, width, quality)
+            images[clip["index"]] = "data:image/jpeg;base64," + base64.b64encode(raw).decode("ascii")
+        return images
+
+    for width in widths:
+        for quality in (6, 10, 14):
+            images = encode(width, quality, clips)
+            if len(_html(story, images, "").encode("utf-8")) <= max_bytes:
+                return images, ""
+    images: dict[int, str] = {}
+    omitted = False
+    for clip in clips:
+        trial = encode(widths[-1], 14, [clip])
+        merged = {**images, **trial}
+        if len(_html(story, merged, note).encode("utf-8")) <= max_bytes:
+            images = merged
+        else:
+            omitted = True
+    if not images and len(_html(story, {}, note).encode("utf-8")) > max_bytes:
+        return {}, note
+    return images, note if omitted or len(images) < len(clips) else ""
+
+
+def _html(story: dict, images: dict[int, str] | None = None, note: str = "") -> str:
     source_duration = float(story["source_duration"] or 0)
     output_duration = float(story["output_duration"] or 0)
     keep = [(clip["src_start"], clip["src_end"], "keep") for clip in story["tracks"]["video"]]
@@ -357,9 +495,15 @@ def _html(story: dict) -> str:
     for clip in story["tracks"]["video"]:
         scene = scenes.get(clip["index"]) or {}
         label = scene.get("label") or "—"
+        if images is None:
+            picture = f'<img src="{html.escape(scene.get("thumb") or "")}" alt="keep {clip["index"]:03d}">'
+        elif images.get(clip["index"]):
+            picture = f'<img alt="keep {clip["index"]:03d}" src="{images[clip["index"]]}">'
+        else:
+            picture = '<div class="missing">omitted · omitida</div>'
         cards.append(
             "<figure>"
-            f'<img src="{html.escape(scene.get("thumb") or "")}" alt="keep {clip["index"]:03d}">'
+            f"{picture}"
             f"<figcaption>#{clip['index']:03d} {clip['src_start']:.2f}–{clip['src_end']:.2f}s"
             f"<br>{html.escape(str(label))}</figcaption></figure>"
         )
@@ -400,6 +544,8 @@ h1 {{ font-size: 22px; margin: 0 0 8px; }}
 figure {{ margin: 0; width: 120px; }}
 img {{ width: 120px; height: 180px; object-fit: cover; background: #ddd; border-radius: 6px; }}
 figcaption {{ font-size: 12px; }}
+.missing {{ width: 120px; height: 180px; background: #ddd; border-radius: 6px; }}
+.note {{ background: #fff4d6; padding: 8px 12px; border-radius: 6px; }}
 table {{ border-collapse: collapse; width: 100%; background: #fff; }}
 th, td {{ border: 1px solid #ddd; padding: 6px 8px; text-align: left; vertical-align: top; }}
 th {{ background: #eee; }}
@@ -408,6 +554,7 @@ th {{ background: #eee; }}
 <body>
 <h1>Storyboard · Guion gráfico</h1>
 <p class="meta">{story['width']}×{story['height']} · {story['fps']} fps · source/fuente {source_duration:.2f}s · output/salida {output_duration:.2f}s · music/música {music['level_db']} dB<br>Hook · Gancho: {hook_text}</p>
+{f'<p class="note">{html.escape(note)}</p>' if note else ''}
 {''.join(timeline)}
 <div class="shots">{''.join(cards)}</div>
 <table>
@@ -451,7 +598,12 @@ CapCut no tiene un archivo de proyecto que podamos escribir. Crea un proyecto, i
 """
 
 
-def write_storyboard(workdir: Path, preset: dict | None = None, vision_path: Path | None = None) -> dict:
+def write_storyboard(
+    workdir: Path,
+    preset: dict | None = None,
+    vision_path: Path | None = None,
+    inline: bool | None = None,
+) -> dict:
     plan_path = workdir / "plan.json"
     if not plan_path.exists():
         raise UGCError("plan.json is missing. Run the plan step first.", "Falta plan.json. Corre primero el plan.")
@@ -471,6 +623,27 @@ def write_storyboard(workdir: Path, preset: dict | None = None, vision_path: Pat
     _contact_sheet(sorted(thumbs.glob("keep_*.jpg")), export / "contact-sheet.jpg")
     dump_json(export / "storyboard.json", story)
     (export / "storyboard.html").write_text(_html(story), encoding="utf-8")
+    (export / "storyboard.md").write_text(_markdown(story), encoding="utf-8")
+    board = preset.get("storyboard") or {}
+    want_inline = bool(board.get("inline", False)) if inline is None else bool(inline)
+    if want_inline:
+        max_bytes = int(board.get("inline_max_bytes", 1_500_000))
+        thumb_width = int(board.get("thumb_width", 320))
+        images, note = _fit_inline_images(story, thumbs, max_bytes, thumb_width)
+        page = _html(story, images, note)
+        encoded = page.encode("utf-8")
+        if len(encoded) > max_bytes:
+            page = _html(story, {}, note or "Thumbnails omitted. / Miniaturas omitidas.")
+            encoded = page.encode("utf-8")
+        (export / "storyboard.inline.html").write_bytes(encoded)
+        story["inline"] = {
+            "file": "storyboard.inline.html",
+            "bytes": len(encoded),
+            "max_bytes": max_bytes,
+            "embedded": len(images),
+            "note": note,
+        }
+        dump_json(export / "storyboard.json", story)
     _csv(export / "storyboard.csv", story)
     caption_cues = []
     for card in story["overlays"]["captions"]:

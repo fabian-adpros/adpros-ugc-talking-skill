@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import base64
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -123,6 +125,31 @@ def test_storyboard_matches_kept_ranges_and_one_frame(tmp_path: Path):
     assert (export / "RELINK.md").exists()
     assert story["scenes"]
     assert story["broll_slots"] == []
+    markdown = (export / "storyboard.md").read_text(encoding="utf-8")
+    kept_rows = [line for line in markdown.splitlines() if re.match(r"^\| \d+ \|", line)]
+    assert len(kept_rows) == len(plan["kept_ranges"])
+
+
+def test_inline_html_is_self_contained_and_respects_the_cap(tmp_path: Path):
+    work = _workdir(tmp_path)
+    preset = json.loads(json.dumps(DEFAULTS))
+    preset["export"]["width"] = 320
+    preset["export"]["height"] = 180
+    preset["storyboard"] = {"inline": True, "inline_max_bytes": 20000, "thumb_width": 320}
+    write_storyboard(work, preset, None, inline=True)
+    page = (work / "export" / "storyboard.inline.html").read_text(encoding="utf-8")
+    assert len(page.encode("utf-8")) <= 20000
+    assert "thumbs/" not in page
+    assert not re.search(r"""(?:src|href)\s*=\s*['"](?!data:)""", page)
+    assert "http://" not in page and "https://" not in page
+    blobs = re.findall(r"data:image/jpeg;base64,([A-Za-z0-9+/=]+)", page)
+    for blob in blobs:
+        raw = base64.b64decode(blob)
+        assert raw.startswith(b"\xff\xd8")
+    if "omitid" not in page and "omitted" not in page:
+        assert blobs
+    local = (work / "export" / "storyboard.html").read_text(encoding="utf-8")
+    assert "thumbs/keep_001.jpg" in local
 
 
 def test_low_confidence_product_reveal_is_not_a_marker(tmp_path: Path):

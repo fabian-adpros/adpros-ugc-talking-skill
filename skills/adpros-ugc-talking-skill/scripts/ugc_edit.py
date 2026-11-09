@@ -550,6 +550,8 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--review-storyboard", action="store_true")
     run.add_argument("--no-review-storyboard", action="store_true")
     run.add_argument("--storyboard-yes", action="store_true")
+    run.add_argument("--inline", action="store_true")
+    run.add_argument("--no-inline", action="store_true")
 
     for name, needs_input in (
         ("transcribe", True),
@@ -570,15 +572,34 @@ def build_parser() -> argparse.ArgumentParser:
             review_storyboard=False,
             no_review_storyboard=False,
             storyboard_yes=False,
+            inline=False,
+            no_inline=False,
         )
     storyboard = sub.add_parser("storyboard")
     storyboard.add_argument("--workdir", required=True)
     storyboard.add_argument("--preset")
     storyboard.add_argument("--ui", default="auto", choices=["auto", "en", "es"])
     storyboard.add_argument("--vision-labels")
-    storyboard.set_defaults(func=None, nle=None)
+    storyboard.add_argument("--inline", action="store_true")
+    storyboard.add_argument("--no-inline", action="store_true")
+    storyboard.set_defaults(func=None, nle=None, inline=False, no_inline=False)
     run.set_defaults(func=None)
     return parser
+
+
+def _inline_flag(args: argparse.Namespace) -> bool | None:
+    inline = bool(getattr(args, "inline", False))
+    no_inline = bool(getattr(args, "no_inline", False))
+    if inline and no_inline:
+        raise UGCError(
+            "Pass only one of --inline and --no-inline.",
+            "Pasa solo uno de --inline y --no-inline.",
+        )
+    if inline:
+        return True
+    if no_inline:
+        return False
+    return None
 
 
 def _preset_from_args(args: argparse.Namespace) -> dict:
@@ -601,6 +622,7 @@ def main(argv: list[str] | None = None) -> int:
                 Path(args.workdir),
                 _preset_from_args(args),
                 Path(args.vision_labels) if args.vision_labels else None,
+                inline=_inline_flag(args),
             )
         except UGCError as exc:
             print(exc.text(_ui(args.ui, None)), file=sys.stderr)
@@ -678,7 +700,7 @@ def main(argv: list[str] | None = None) -> int:
                 if status == "review":
                     plan["delivery"] = payload
                     dump_json(workdir / "plan.json", plan)
-                    write_storyboard(workdir, preset, None)
+                    write_storyboard(workdir, preset, None, inline=_inline_flag(args))
                     print(
                         storyboard_checkpoint(
                             ui,

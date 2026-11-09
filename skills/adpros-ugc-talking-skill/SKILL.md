@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires ffmpeg (libass, libx264, aac, loudnorm), Python 3.10+, and faster-whisper or WhisperX. auto-editor is the preferred silence engine. Node.js and Remotion are optional; FFmpeg renders if they are missing. CPU or CUDA. English and Spanish. No hosted API.
 metadata:
   author: Fabian
-  version: "0.2.1"
+  version: "0.2.2"
   languages: "en,es"
 ---
 
@@ -47,7 +47,14 @@ PY="${SKILL_DIR}/.venv/bin/python"
 "$PY" "$SKILL_DIR/scripts/ugc_edit.py" storyboard --workdir "$WORKDIR" --ui es
 ```
 
-That fills `$WORKDIR/export/` with `storyboard.json`, `storyboard.html`, `storyboard.csv`, `thumbs/keep_NNN.jpg`, `contact-sheet.jpg`, `captions.srt`, `hook.srt`, and `RELINK.md`. The SRT files are in edited-timeline time.
+That fills `$WORKDIR/export/` with `storyboard.json`, `storyboard.html`, `storyboard.md`, `storyboard.csv`, `thumbs/keep_NNN.jpg`, `contact-sheet.jpg`, `captions.srt`, `hook.srt`, and `RELINK.md`. `storyboard.html` points at the thumbnail files. That is the local default. The SRT files are in edited-timeline time.
+
+Add `--inline`, or set `storyboard.inline` in the preset, to also write `storyboard.inline.html`. That file is one HTML document: CSS is in a `<style>` block, thumbnails are JPEG data URIs around 320 px wide, and it does not load a script, a CDN, or a local image file. `storyboard.inline_max_bytes` (default 1500000) is the cap. If the page would be larger, thumbnails are shrunk and then dropped, and the page says so. This cap was not checked against Claude.ai's real artifact limit.
+
+After `storyboard`:
+
+- In Claude.ai, if the chat can show an HTML artifact, pass `--inline` and present the full text of `export/storyboard.inline.html` as that artifact. Also offer the export files for download. This artifact path was not verified inside Claude.ai.
+- In Claude Code there is no artifact. Paste `export/storyboard.md` into the chat. Tell the user the path and how to open the local page: `open export/storyboard.html` on macOS, `xdg-open export/storyboard.html` on Linux.
 
 Optional vision labels, only after you have looked at the thumbnails (still frames, not the video). Write `labels.json` with a closed set: `talking_head`, `product_visible`, `product_reveal`, `hands`, `screen_or_laptop`, `text_on_screen`, `environment`, `unclear`. Confidence is `low`, `medium`, or `high`, plus a short `evidence` string that names what you actually see in that JPEG. A `low` confidence `product_reveal` does not become a marker. Then:
 

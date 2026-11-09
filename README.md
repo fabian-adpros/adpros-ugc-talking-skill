@@ -131,7 +131,7 @@ El preset de ejemplo es [`skills/adpros-ugc-talking-skill/assets/preset.json`](s
 | `captions.highlight_active_word` | true | La palabra activa pasa a amarillo |
 | `captions.y_ratio` | 0.75 | Centro vertical del subtítulo. 0.75 queda en la zona baja segura, por encima de la UI. No busca una cara |
 
-Después del plan, `python scripts/ugc_edit.py storyboard --workdir DIR` escribe `DIR/export/` (guion gráfico, miniaturas, SRT). `python scripts/ugc_edit.py export --workdir DIR --nle all` añade `project_premiere.xml` (XML de FCP 7, no FCPXML), `project.fcpxml` (FCPXML 1.11 de auto-editor 29) y, si instalaste `./install.sh --with-otio`, `timeline.otio` y `project.edl`. El video de origen se conforma a fps constantes antes de esos proyectos.
+Después del plan, `python scripts/ugc_edit.py storyboard --workdir DIR` escribe `DIR/export/` (guion gráfico, miniaturas, `storyboard.md`, SRT). `--inline` añade `storyboard.inline.html`, un solo HTML con las miniaturas en base64, sin red. El tope es `storyboard.inline_max_bytes` (1,5 MB por defecto); no está comprobado contra el límite real de artefactos de Claude.ai. `python scripts/ugc_edit.py export --workdir DIR --nle all` añade `project_premiere.xml` (XML de FCP 7, no FCPXML), `project.fcpxml` (FCPXML 1.11 de auto-editor 29) y, si instalaste `./install.sh --with-otio`, `timeline.otio` y `project.edl`. El video de origen se conforma a fps constantes antes de esos proyectos.
 | `hook.duration_seconds` | 3 | Cuánto dura el texto del gancho |
 | `music.file` | null | `null` usa `assets/music/bed.m4a`. O pasa `--music` |
 | `music.duck_db` | -18 | La cama queda estos dB bajo la voz |
@@ -378,7 +378,7 @@ The sample preset is [`skills/adpros-ugc-talking-skill/assets/preset.json`](skil
 | `captions.highlight_active_word` | true | The active word turns yellow |
 | `captions.y_ratio` | 0.75 | Vertical center of the caption line. 0.75 sits in the lower safe area, above the UI. It does not look for a face |
 
-After the plan, `python scripts/ugc_edit.py storyboard --workdir DIR` writes `DIR/export/` (storyboard, thumbnails, SRT). `python scripts/ugc_edit.py export --workdir DIR --nle all` adds `project_premiere.xml` (FCP 7 XML, not FCPXML), `project.fcpxml` (FCPXML 1.11 from auto-editor 29) and, if you installed with `./install.sh --with-otio`, `timeline.otio` and `project.edl`. The source is conformed to a constant frame rate before those projects.
+After the plan, `python scripts/ugc_edit.py storyboard --workdir DIR` writes `DIR/export/` (storyboard, thumbnails, `storyboard.md`, SRT). `--inline` also writes `storyboard.inline.html`, one HTML file with base64 thumbnails and no network. The cap is `storyboard.inline_max_bytes` (1.5 MB by default). That cap was not checked against Claude.ai's real artifact limit. `python scripts/ugc_edit.py export --workdir DIR --nle all` adds `project_premiere.xml` (FCP 7 XML, not FCPXML), `project.fcpxml` (FCPXML 1.11 from auto-editor 29) and, if you installed with `./install.sh --with-otio`, `timeline.otio` and `project.edl`. The source is conformed to a constant frame rate before those projects.
 | `hook.duration_seconds` | 3 | How long the hook stays up |
 | `music.file` | null | `null` uses `assets/music/bed.m4a`. Or pass `--music` |
 | `music.duck_db` | -18 | Bed level under the voice |
