@@ -22,7 +22,7 @@ jobs:
           cache-dependency-path: skills/adpros-ugc-talking-skill/template/package-lock.json
 
       - name: Install ffmpeg
-        run: sudo apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y ffmpeg
+        run: sudo apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y ffmpeg libxml2-utils
 
       - name: Unit tests
         run: |

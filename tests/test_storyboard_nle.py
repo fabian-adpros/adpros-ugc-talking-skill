@@ -198,7 +198,9 @@ def test_premiere_xml_is_not_fcpxml_and_files_are_well_formed(tmp_path: Path):
     for name in ("project_premiere.xml", "project.fcpxml"):
         xml = export / name
         ET.parse(xml)
-        lint = subprocess.run(["xmllint", "--noout", str(xml)], capture_output=True, text=True)
+        xmllint = shutil.which("xmllint")
+        assert xmllint, "xmllint is required to check the project XML"
+        lint = subprocess.run([xmllint, "--noout", str(xml)], capture_output=True, text=True)
         assert lint.returncode == 0, lint.stderr
     assert (export / "media" / "source.mp4").exists()
     assert (export / "media" / "music.m4a").exists()
