@@ -41,6 +41,10 @@ Produced before the render. This is the approval payload.
 
 What Remotion receives. `videoSrc` and `musicSrc` are filenames inside `template/public/`, not absolute paths. `musicVolume` is a linear gain.
 
+## storyboard.json
+
+Written by `storyboard` from `plan.json`. `tracks.video` and `tracks.audio_voice` are the kept ranges snapped onto the preset frame grid (`src_in`/`src_out`/`dst_in`/`dst_out` are frame numbers). `tracks.music` runs from 0 to `output_duration` at `level_db`. `cuts[]` repeats silence and filler ranges with `reason`. `scenes[]` and `broll_slots[]` stay empty until `--vision-labels` adds them. A `product_reveal` label with `confidence: low` is stored on the scene and does not become a b-roll marker.
+
 ## export.json
 
 `final`, `frame`, `duration`, `width`, `height`, `lufs`, `true_peak`, `trimmed`, `renderer`.

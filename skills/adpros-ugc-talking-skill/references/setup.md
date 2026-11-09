@@ -17,6 +17,8 @@ INSTALL_WHISPERX=1 ./install.sh
 
 The pipeline uses WhisperX when the `whisperx` command is on `PATH`, and faster-whisper otherwise.
 
+`./install.sh --with-otio` also installs OpenTimelineIO, `otio-cmx3600-adapter`, `otio-fcp-adapter`, and `otio-fcpx-xml-adapter`. The OpenTimelineIO-Plugins package does not include the FCPXML adapter, so it is named on its own. Storyboard, Premiere XML, and FCPXML from auto-editor do not need it.
+
 ## First model download
 
 faster-whisper downloads weights on the first transcription, into the Hugging Face cache (`~/.cache/huggingface`). On CPU the default model is `small` (about 500 MB). On CUDA it is `large-v3` (about 3 GB). That first run can sit at "downloading" for several minutes. Later runs reuse the files. Pass `--model base` or `--model tiny` when you want a smaller download.

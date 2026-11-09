@@ -34,7 +34,9 @@ from lib.media import (  # noqa: E402
     probe,
     trim_media,
 )
+from lib.nle import NLE_CHOICES, export_nle, otio_adapter, otio_available  # noqa: E402
 from lib.render import cut_video, remotion_ready, render_styled  # noqa: E402
+from lib.storyboard import write_storyboard  # noqa: E402
 from lib.transcribe import detect_device, transcribe, whisperx_bin  # noqa: E402
 from lib.util import UGCError, dump_json, load_json, prepend_tool_paths, round_time, skill_root  # noqa: E402
 
@@ -489,6 +491,10 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     add("music bed", (root / "assets" / "music" / "bed.m4a").exists(), "generated bed", False)
     add("node", bool(which("node")), which("node") or "missing", False)
     add("remotion", remotion_ready(root / "template"), "template/node_modules/remotion", False)
+    add("opentimelineio", otio_available(), "optional timeline.otio", False)
+    add("otio cmx_3600", otio_adapter("cmx_3600"), "optional CMX EDL", False)
+    add("otio fcp_xml", otio_adapter("fcp_xml"), "optional FCP7 fallback", False)
+    add("otio fcpx_xml", otio_adapter("fcpx_xml"), "optional FCPXML fallback", False)
     failed = False
     for name, ok, detail, required in rows:
         mark = "ok" if ok else ("MISSING" if required else "optional")
@@ -542,8 +548,16 @@ def build_parser() -> argparse.ArgumentParser:
     ):
         command = sub.add_parser(name)
         add_common(command, needs_input)
-        command.set_defaults(func=None, yes=False, from_step=None, until=None)
-    run.set_defaults(func=None)
+        if name == "export":
+            command.add_argument("--nle", choices=NLE_CHOICES)
+        command.set_defaults(func=None, yes=False, from_step=None, until=None, nle=None)
+    storyboard = sub.add_parser("storyboard")
+    storyboard.add_argument("--workdir", required=True)
+    storyboard.add_argument("--preset")
+    storyboard.add_argument("--ui", default="auto", choices=["auto", "en", "es"])
+    storyboard.add_argument("--vision-labels")
+    storyboard.set_defaults(func=None, nle=None)
+    run.set_defaults(func=None, nle=None)
     return parser
 
 
@@ -561,6 +575,35 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.cmd == "doctor":
         return cmd_doctor(args)
+    if args.cmd == "storyboard":
+        try:
+            story = write_storyboard(
+                Path(args.workdir),
+                _preset_from_args(args),
+                Path(args.vision_labels) if args.vision_labels else None,
+            )
+        except UGCError as exc:
+            print(exc.text(_ui(args.ui, None)), file=sys.stderr)
+            return 2
+        ui = _ui(args.ui, None)
+        _say(
+            ui,
+            f"Storyboard: {len(story['tracks']['video'])} shots in {args.workdir}/export/",
+            f"Guion gráfico: {len(story['tracks']['video'])} tomas en {args.workdir}/export/",
+        )
+        return 0
+    if args.cmd == "export" and getattr(args, "nle", None):
+        try:
+            result = export_nle(Path(args.workdir), args.nle, _preset_from_args(args))
+        except UGCError as exc:
+            print(exc.text(_ui(args.ui, None)), file=sys.stderr)
+            return 2
+        ui = _ui(args.ui, None)
+        names = ", ".join(result["written"]) or "—"
+        _say(ui, f"NLE export: {names}", f"Exportación NLE: {names}")
+        for note in result["notes"]:
+            print(note)
+        return 0
     try:
         workdir = Path(args.workdir)
         workdir.mkdir(parents=True, exist_ok=True)
