@@ -34,7 +34,14 @@ from lib.media import (  # noqa: E402
     probe,
     trim_media,
 )
-from lib.nle import NLE_CHOICES, export_nle, otio_adapter, otio_available  # noqa: E402
+from lib.delivery import (  # noqa: E402
+    AWAITING_DELIVERY,
+    AWAITING_STORYBOARD,
+    delivery_questions,
+    resolve_delivery,
+    storyboard_checkpoint,
+)
+from lib.nle import NLE_CHOICES, export_nle, otio_adapter, otio_available, otio_version  # noqa: E402
 from lib.render import cut_video, remotion_ready, render_styled  # noqa: E402
 from lib.storyboard import write_storyboard  # noqa: E402
 from lib.transcribe import detect_device, transcribe, whisperx_bin  # noqa: E402
@@ -491,7 +498,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     add("music bed", (root / "assets" / "music" / "bed.m4a").exists(), "generated bed", False)
     add("node", bool(which("node")), which("node") or "missing", False)
     add("remotion", remotion_ready(root / "template"), "template/node_modules/remotion", False)
-    add("opentimelineio", otio_available(), "optional timeline.otio", False)
+    add("opentimelineio", otio_available(), otio_version() or "not installed", False)
     add("otio cmx_3600", otio_adapter("cmx_3600"), "optional CMX EDL", False)
     add("otio fcp_xml", otio_adapter("fcp_xml"), "optional FCP7 fallback", False)
     add("otio fcpx_xml", otio_adapter("fcpx_xml"), "optional FCPXML fallback", False)
@@ -539,6 +546,10 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--yes", action="store_true")
     run.add_argument("--from", dest="from_step", choices=["transcribe", "plan", "render", "export"])
     run.add_argument("--until", choices=["plan", "render", "export"])
+    run.add_argument("--nle", default=None, help="Comma-separated editors, all, or none.")
+    run.add_argument("--review-storyboard", action="store_true")
+    run.add_argument("--no-review-storyboard", action="store_true")
+    run.add_argument("--storyboard-yes", action="store_true")
 
     for name, needs_input in (
         ("transcribe", True),
@@ -549,15 +560,24 @@ def build_parser() -> argparse.ArgumentParser:
         command = sub.add_parser(name)
         add_common(command, needs_input)
         if name == "export":
-            command.add_argument("--nle", choices=NLE_CHOICES)
-        command.set_defaults(func=None, yes=False, from_step=None, until=None, nle=None)
+            command.add_argument("--nle", default=None, help="Comma-separated editors, all, or none.")
+        command.set_defaults(
+            func=None,
+            yes=False,
+            from_step=None,
+            until=None,
+            nle=None,
+            review_storyboard=False,
+            no_review_storyboard=False,
+            storyboard_yes=False,
+        )
     storyboard = sub.add_parser("storyboard")
     storyboard.add_argument("--workdir", required=True)
     storyboard.add_argument("--preset")
     storyboard.add_argument("--ui", default="auto", choices=["auto", "en", "es"])
     storyboard.add_argument("--vision-labels")
     storyboard.set_defaults(func=None, nle=None)
-    run.set_defaults(func=None, nle=None)
+    run.set_defaults(func=None)
     return parser
 
 
@@ -650,6 +670,25 @@ def main(argv: list[str] | None = None) -> int:
         if order.index("render") <= order.index(until) and order.index(start) <= order.index("render"):
             if plan is None:
                 raise UGCError("plan.json is missing.", "Falta plan.json.")
+            if args.cmd == "run":
+                status, payload = resolve_delivery(args, plan, preset)
+                if status == "ask":
+                    print(delivery_questions(ui))
+                    return AWAITING_DELIVERY
+                if status == "review":
+                    plan["delivery"] = payload
+                    dump_json(workdir / "plan.json", plan)
+                    write_storyboard(workdir, preset, None)
+                    print(
+                        storyboard_checkpoint(
+                            ui,
+                            str(workdir / "export" / "storyboard.html"),
+                            str(workdir / "export" / "contact-sheet.jpg"),
+                        )
+                    )
+                    return AWAITING_STORYBOARD
+                plan["delivery"] = payload
+                dump_json(workdir / "plan.json", plan)
             info = _do_render(args, preset, workdir, plan)
             _say(
                 ui,
@@ -661,6 +700,13 @@ def main(argv: list[str] | None = None) -> int:
                 plan = load_json(workdir / "plan.json")
             summary = _do_export(preset, workdir, plan)
             _print_export(summary, ui)
+            delivery = (plan or {}).get("delivery") or {}
+            if delivery.get("editor_projects") and delivery.get("editors"):
+                result = export_nle(workdir, ",".join(delivery["editors"]), preset)
+                names = ", ".join(result["written"]) or "—"
+                _say(ui, f"NLE export: {names}", f"Exportación NLE: {names}")
+                for note in result["notes"]:
+                    print(note)
         return 0
     except UGCError as exc:
         ui = _ui(getattr(args, "ui", "auto"), None)

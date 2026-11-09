@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.1
+
+- FCPXML asset duration is the full conformed source, and the file is marked 1.10 so a clip near the end of an iPhone file stays inside the asset.
+- `install.sh --with-otio` allows OpenTimelineIO 0.18.x. `doctor.sh` prints that version.
+- After the hook is approved, exit 11 asks whether to write editor files, which editors, and whether to review the storyboard. Exit 12 waits on that storyboard. `--yes` uses the preset and does not ask. Answers are stored on the plan.
+
 ## 0.2.0
 
 - `ugc_edit.py storyboard` writes `export/storyboard.json`, an HTML timeline, a CSV shot list, thumbnails, a contact sheet, edited-timeline SRT files, and `RELINK.md`.

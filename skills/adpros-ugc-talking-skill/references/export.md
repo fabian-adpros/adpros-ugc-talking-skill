@@ -16,8 +16,8 @@ Order of work: cut to the kept ranges → style (captions, hook, bed) → trim i
 `ugc_edit.py storyboard --workdir DIR` reads `plan.json` and writes `DIR/export/`. `ugc_edit.py export --workdir DIR --nle all` conforms the source to the preset frame rate first (constant frame rate, so an iPhone variable-frame-rate HEVC file does not drift inside the NLE) and then writes:
 
 - `project_premiere.xml` — FCP 7 xmeml from auto-editor 29. This is not FCPXML.
-- `project.fcpxml` — FCPXML 1.11 from `auto-editor --export final-cut-pro`. That is the version auto-editor 29 emits. Resolve can import the same file. 1.10 was not rewritten over it.
-- `timeline.otio` and `project.edl` only when OpenTimelineIO and `otio-cmx3600-adapter` import. `./install.sh --with-otio` installs `opentimelineio`, `otio-cmx3600-adapter`, `otio-fcp-adapter`, and `otio-fcpx-xml-adapter`. The OpenTimelineIO-Plugins bundle does not include `otio-fcpx-xml-adapter`.
+- `project.fcpxml` — auto-editor 29 emits FCPXML 1.11 and sets the asset duration to the edited timeline. This skill rewrites the asset duration to the full conformed source, then sets `version="1.10"` because that document validates against Apple's FCPXML 1.10 DTD (checked locally; the DTD is Apple copyright and is not vendored). Resolve 18/19 and Final Cut import 1.10. The same file is what DaVinci Resolve opens.
+- `timeline.otio` and `project.edl` only when OpenTimelineIO and `otio-cmx3600-adapter` import. `./install.sh --with-otio` installs `opentimelineio>=0.17,<0.19` (0.18.1 has a Python 3.13 wheel), `otio-cmx3600-adapter`, `otio-fcp-adapter`, and `otio-fcpx-xml-adapter`. The OpenTimelineIO-Plugins bundle does not include `otio-fcpx-xml-adapter`. `doctor.sh` prints the installed OpenTimelineIO version.
 - `media/source.mp4`, `media/music.m4a`, and `media/preview.mp4` when `final.mp4` already exists.
 
 `captions.srt` and `hook.srt` are in edited-timeline time. CapCut has no project format here, and CapCut mobile does not import SRT. See the generated `RELINK.md`.

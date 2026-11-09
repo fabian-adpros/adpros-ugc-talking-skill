@@ -208,6 +208,7 @@ flowchart TD
 - No hay versión de Windows en esta fase. El render de Remotion a 1080×1920 pide RAM; el script usa `--concurrency=1`.
 - La instalación con Homebrew está escrita y no se ejecutó en macOS aquí.
 - El lugar de los subtítulos, el gancho en libass y el candado de sincronía se probaron con ffmpeg en Linux. No se volvieron a correr en macOS.
+- `captions.y_ratio` es fijo. En un reveal el subtítulo puede tapar el producto. No hay seguimiento del objeto.
 - El skill no traduce. Un clip en español sale en español.
 
 ### Roadmap (fase 2)
@@ -454,6 +455,7 @@ Run `./doctor.sh` first. A quiet first transcription is the model download. Exit
 - No Windows support in this phase. A 1080×1920 Remotion render is heavy; the script already passes `--concurrency=1`.
 - The Homebrew install path is written and was not executed on macOS here.
 - Caption placement, the libass hook, and the sync lock were checked with ffmpeg on Linux. They were not run again on macOS.
+- `captions.y_ratio` is a fixed line. During a product reveal the captions can cover the product. There is no object tracking.
 - The skill does not translate. A Spanish clip stays in Spanish.
 
 ### Roadmap (phase 2)
