@@ -2,7 +2,11 @@
 
 | What you see | What to do |
 | --- | --- |
-| Exit 10 | Not an error. Read the plan to the user and wait. |
+| Exit 10 | Not an error. Read the plan to the user and wait. Then show the numbered `next_steps`. |
+| Exit 11 | Not an error. Ask the delivery questions, then show `next_steps`. |
+| Exit 12 | Not an error. Show the storyboard and wait. Then show `next_steps`. |
+| Exit 13 | Not an error. Compare the side-by-side frames. Warn if a hand-held product or the hands are missing or flicker. Then show `next_steps`. |
+| `backgroundremover is not installed` | `./install.sh --with-bg`, then run the same `--bg` command again. The first run downloads about 176 MB into `~/.u2net`. |
 | `faster-whisper is not installed` | `bash install.sh`, then call `.venv/bin/python`, not system `python3`. |
 | Transcription sits with no output | The model is downloading. See [setup.md](setup.md). Do not kill it on the first run. |
 | `No transcription engine succeeded` | doctor.sh. On CPU, retry with `--model tiny` if the download of `small` failed. |

@@ -51,6 +51,12 @@ WhisperX, si lo quieres:
 INSTALL_WHISPERX=1 ./install.sh
 ```
 
+Fondo opcional (imagen, video, o ProRes 4444 con alfa). `./install.sh --with-bg` instala torch de CPU, BiRefNet_lite y `backgroundremover`. Si esos paquetes fallan, el script sale con error. La primera vez baja `ZhengPeng7/BiRefNet_lite` en la revisión `aa62cd87eafb` (MIT; ese repo se considera de confianza). `HF_TOKEN` es opcional y solo sube el límite del Hub. En CPU, BiRefNet_lite a lado corto 320 tardó unos 1,05 s por cuadro (clip de 11 s, 331 cuadros, unos 6 minutos). El CLI de U2-Net en el mismo clip tardó unos 72 s. MPS en Apple Silicon no se midió. La salida 13 muestra 3–5 cuadros y el motor que corrió. `--yes` no pregunta y deja el fondo original, salvo que el preset lo encienda.
+
+```bash
+./install.sh --with-bg
+```
+
 ### Instalar el skill
 
 **Claude Code, para ti**
@@ -183,9 +189,12 @@ flowchart TD
   J --> K{¿Confirmas el gancho?}
   K -->|no| J
   K -->|sí| L[Corte ffmpeg]
-  L --> M{Remotion?}
+  L --> L2{¿Fondo nuevo?}
+  L2 -->|sí| L3[Mate u2net y composite]
+  L2 -->|no| M{Remotion?}
+  L3 --> M
   M -->|sí| N[Composición TalkingHead]
-  M -->|no| O[ASS + drawtext + volume -18 dB]
+  M -->|no| O[ASS libass + música −18 dB]
   N --> P[loudnorm -14 LUFS y tope 60 s]
   O --> P
   P --> Q[final.mp4]
@@ -210,6 +219,8 @@ flowchart TD
 - El lugar de los subtítulos, el gancho en libass y el candado de sincronía se probaron con ffmpeg en Linux. No se volvieron a correr en macOS.
 - `captions.y_ratio` es fijo. En un reveal el subtítulo puede tapar el producto. No hay seguimiento del objeto.
 - El skill no traduce. Un clip en español sale en español.
+- En un clip real de 11 s, BiRefNet_lite (lado corto 320, CPU) dejó sólidos la camiseta negra, la caja negra y la mano. Hubo una filtración breve cerca de los 5,0 s al levantar el producto. Unos 1,05 s por cuadro, cerca de 6 minutos para 331 cuadros. El CLI de U2-Net tardó unos 72 s. MPS en Apple Silicon no se midió. El maestro con alfa no lleva los subtítulos quemados; van en el MP4 y en el SRT.
+- Cada comando imprime `next_steps` en el idioma del clip (inglés o español) y lo guarda en `plan.json`.
 
 ### Roadmap (fase 2)
 
@@ -218,6 +229,7 @@ flowchart TD
 - HeyGen cuando el clip de entrada sea un avatar y no una toma real
 - Variantes y ganchos A/B a partir del mismo transcript
 - Windows, con rutas y un instalador que no dependa de Homebrew
+- Grounded-SAM-2 para seguir a la persona y al producto con un prompt, en vez del recorte cuadro a cuadro de U2-Net
 
 ### Créditos y licencias
 
@@ -232,6 +244,10 @@ Este repositorio es MIT. Copyright 2026 Fabián. Ver `LICENSE`.
 | [auto-editor](https://github.com/WyattBlue/auto-editor) | Unlicense | El código del repo. Los binarios de las releases pueden arrastrar otras licencias |
 | [FFmpeg](https://ffmpeg.org) | GPL o LGPL según el build | No se incluye. Hace falta el del sistema. Un build con libx264 suele ser GPL |
 | [Remotion](https://www.remotion.dev/docs/license) | Licencia Remotion, no es OSI | Gratis para una persona o una empresa de hasta 3 personas, también en uso comercial. Empresas más grandes necesitan Company License |
+| [backgroundremover](https://github.com/nadermx/backgroundremover) | MIT | Opcional. Quitar fondo. `./install.sh --with-bg` |
+| Pesos U2-Net | Apache-2.0 | Se bajan a `~/.u2net` la primera vez. No van en el repo |
+| [BiRefNet_lite](https://huggingface.co/ZhengPeng7/BiRefNet_lite) | MIT | Código y pesos MIT. Motor por defecto si importa. No va en el repo |
+| [BEN2 base](https://huggingface.co/PramaLLC/BEN2) | MIT | Opcional (`--bg-engine ben2`). El modelo comercial no es este paquete |
 | [Inter](https://github.com/rsms/inter) | SIL OFL 1.1 | `assets/fonts/`, ver `OFL.txt` |
 | React | MIT | Dependencia de la plantilla |
 
@@ -296,6 +312,12 @@ Optional WhisperX:
 
 ```bash
 INSTALL_WHISPERX=1 ./install.sh
+```
+
+Optional background removal (an image, a video, or a ProRes 4444 alpha master). `./install.sh --with-bg` installs the CPU torch wheel, BiRefNet_lite, and `backgroundremover`. If those packages fail, the script exits non-zero. The first run downloads `ZhengPeng7/BiRefNet_lite` at revision `aa62cd87eafb` (MIT; that repo is trusted). `HF_TOKEN` is optional and only raises the Hub rate limit. On CPU, BiRefNet_lite at short side 320 took about 1.05 s/frame (11 s clip, 331 frames, about 6 minutes). The U2-Net CLI on the same clip took about 72 s. Apple Silicon MPS was not timed. Exit 13 shows 3–5 frames and the engine that ran. `--yes` skips the question and keeps the original background unless the preset turns it on.
+
+```bash
+./install.sh --with-bg
 ```
 
 ### Install the skill
@@ -430,9 +452,12 @@ flowchart TD
   J --> K{Confirm the hook?}
   K -->|no| J
   K -->|yes| L[ffmpeg cut]
-  L --> M{Remotion?}
+  L --> L2{New background?}
+  L2 -->|yes| L3[u2net matte and composite]
+  L2 -->|no| M{Remotion?}
+  L3 --> M
   M -->|yes| N[TalkingHead composition]
-  M -->|no| O[ASS + drawtext + volume -18 dB]
+  M -->|no| O[libass captions + music −18 dB]
   N --> P[loudnorm -14 LUFS and 60 s cap]
   O --> P
   P --> Q[final.mp4]
@@ -457,6 +482,8 @@ Run `./doctor.sh` first. A quiet first transcription is the model download. Exit
 - Caption placement, the libass hook, and the sync lock were checked with ffmpeg on Linux. They were not run again on macOS.
 - `captions.y_ratio` is a fixed line. During a product reveal the captions can cover the product. There is no object tracking.
 - The skill does not translate. A Spanish clip stays in Spanish.
+- On a real 11 s clip, BiRefNet_lite (short side 320, CPU) kept a black shirt, a black product box, and a waving hand. There was a brief leak around 5.0 s during a lift. About 1.05 s/frame, about 6 minutes for 331 frames. The U2-Net CLI took about 72 s. Apple Silicon MPS was not timed. The alpha master does not have burned-in captions; those are on the MP4 and in the SRT.
+- Every command prints `next_steps` in the clip language (English or Spanish) and stores the list on `plan.json`.
 
 ### Roadmap (phase 2)
 
@@ -465,6 +492,7 @@ Run `./doctor.sh` first. A quiet first transcription is the model download. Exit
 - HeyGen when the source is an avatar rather than a real take
 - Variants and A/B hooks from the same transcript
 - Windows, with paths and an installer that does not assume Homebrew
+- Grounded-SAM-2 for prompted person-plus-product tracking, instead of U2-Net's frame-by-frame cutout
 
 ### Credits and licenses
 
@@ -479,6 +507,10 @@ This repo is MIT. Copyright 2026 Fabián. See `LICENSE`.
 | [auto-editor](https://github.com/WyattBlue/auto-editor) | Unlicense | The repo. Release binaries can pull in other licenses |
 | [FFmpeg](https://ffmpeg.org) | GPL or LGPL depending on the build | Not vendored. A build with libx264 is usually GPL |
 | [Remotion](https://www.remotion.dev/docs/license) | Remotion License, not OSI open source | Free for an individual or a company of up to 3 people, including commercial use. Larger companies need a Company License |
+| [backgroundremover](https://github.com/nadermx/backgroundremover) | MIT | Optional background removal. `./install.sh --with-bg` |
+| U2-Net weights | Apache-2.0 | Downloaded into `~/.u2net` on first use. Not committed |
+| [BiRefNet_lite](https://huggingface.co/ZhengPeng7/BiRefNet_lite) | MIT | Code and weights are MIT. Default engine when it imports. Not committed |
+| [BEN2 base](https://huggingface.co/PramaLLC/BEN2) | MIT | Optional (`--bg-engine ben2`). The commercial model is not this package |
 | [Inter](https://github.com/rsms/inter) | SIL OFL 1.1 | `assets/fonts/`, see `OFL.txt` |
 | React | MIT | Template dependency |
 

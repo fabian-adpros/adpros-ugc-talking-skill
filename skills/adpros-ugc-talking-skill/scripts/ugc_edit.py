@@ -34,6 +34,15 @@ from lib.media import (  # noqa: E402
     probe,
     trim_media,
 )
+from lib.bg import (  # noqa: E402
+    AWAITING_BG,
+    backgroundremover_available,
+    bg_checkpoint_message,
+    build_preview,
+    prepare_picture,
+    resolve_bg,
+)
+from lib.engine import ben2_available, birefnet_available  # noqa: E402
 from lib.delivery import (  # noqa: E402
     AWAITING_DELIVERY,
     AWAITING_STORYBOARD,
@@ -41,6 +50,7 @@ from lib.delivery import (  # noqa: E402
     resolve_delivery,
     storyboard_checkpoint,
 )
+from lib.nextsteps import print_next_steps  # noqa: E402
 from lib.nle import NLE_CHOICES, export_nle, otio_adapter, otio_available, otio_version  # noqa: E402
 from lib.render import cut_video, remotion_ready, render_styled  # noqa: E402
 from lib.storyboard import write_storyboard  # noqa: E402
@@ -347,7 +357,13 @@ def _do_transcribe(args: argparse.Namespace, preset: dict, workdir: Path) -> dic
     )
 
 
-def _do_render(args: argparse.Namespace, preset: dict, workdir: Path, plan: dict) -> dict:
+def _follow(stage: str, ui: str, plan: dict | None, workdir: Path | None, error: str | None = None) -> None:
+    print_next_steps(stage, ui, plan, error=error)
+    if plan is not None and workdir is not None:
+        dump_json(workdir / "plan.json", plan)
+
+
+def _do_render(args: argparse.Namespace, preset: dict, workdir: Path, plan: dict, ui: str) -> dict:
     if args.hook:
         plan["hook"]["text"] = args.hook.strip()
         plan["hook"]["reason"] = "user"
@@ -365,12 +381,48 @@ def _do_render(args: argparse.Namespace, preset: dict, workdir: Path, plan: dict
         crf=int(export["crf"]),
         audio_bitrate=export["audio_bitrate"],
     )
+    state = resolve_bg(args, preset, plan)
+    picture = cut
+    if state["enabled"]:
+        width = int(export["width"])
+        height = int(export["height"])
+        fps = int(export["fps"])
+        if not state["approved"]:
+            frames = build_preview(
+                cut,
+                workdir,
+                state,
+                width,
+                height,
+                fps,
+                int(export["crf"]),
+                export["audio_bitrate"],
+            )
+            state["previews"] = frames
+            state["approved"] = False
+            plan["bg"] = state
+            print(bg_checkpoint_message(ui, frames, state))
+            _follow("bg", ui, plan, workdir)
+            return {"awaiting": AWAITING_BG, "renderer": None}
+        picture = prepare_picture(
+            cut,
+            workdir,
+            state,
+            width,
+            height,
+            fps,
+            int(export["crf"]),
+            export["audio_bitrate"],
+        )
+        state["approved"] = True
+    plan["bg"] = state
+    dump_json(workdir / "plan.json", plan)
     music = _resolve_music(preset, args.music)
     styled = workdir / "styled.mp4"
     if args.renderer and args.renderer != "auto":
         preset["_renderer_explicit"] = True
     info = render_styled(
-        cut,
+        picture,
         styled,
         plan,
         preset,
@@ -502,6 +554,20 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     add("otio cmx_3600", otio_adapter("cmx_3600"), "optional CMX EDL", False)
     add("otio fcp_xml", otio_adapter("fcp_xml"), "optional FCP7 fallback", False)
     add("otio fcpx_xml", otio_adapter("fcpx_xml"), "optional FCPXML fallback", False)
+    bg_bin = backgroundremover_available()
+    add(
+        "backgroundremover",
+        bool(bg_bin),
+        bg_bin or "not installed; ./install.sh --with-bg (u2net fallback, about 176 MB into ~/.u2net)",
+        False,
+    )
+    add(
+        "birefnet",
+        birefnet_available(),
+        "ZhengPeng7/BiRefNet_lite MIT" if birefnet_available() else "not installed; ./install.sh --with-bg",
+        False,
+    )
+    add("ben2", ben2_available(), "optional PramaLLC/BEN2 MIT base" if ben2_available() else "not installed", False)
     failed = False
     for name, ok, detail, required in rows:
         mark = "ok" if ok else ("MISSING" if required else "optional")
@@ -552,6 +618,7 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--storyboard-yes", action="store_true")
     run.add_argument("--inline", action="store_true")
     run.add_argument("--no-inline", action="store_true")
+    _add_bg_flags(run)
 
     for name, needs_input in (
         ("transcribe", True),
@@ -563,6 +630,8 @@ def build_parser() -> argparse.ArgumentParser:
         add_common(command, needs_input)
         if name == "export":
             command.add_argument("--nle", default=None, help="Comma-separated editors, all, or none.")
+        if name == "render":
+            _add_bg_flags(command)
         command.set_defaults(
             func=None,
             yes=False,
@@ -574,6 +643,16 @@ def build_parser() -> argparse.ArgumentParser:
             storyboard_yes=False,
             inline=False,
             no_inline=False,
+            bg=None,
+            bg_model=None,
+            bg_threshold=None,
+            bg_yes=False,
+            bg_skip=False,
+            bg_infer_size=None,
+            bg_smooth=None,
+            bg_feather=None,
+            bg_engine=None,
+            bg_refine=False,
         )
     storyboard = sub.add_parser("storyboard")
     storyboard.add_argument("--workdir", required=True)
@@ -585,6 +664,19 @@ def build_parser() -> argparse.ArgumentParser:
     storyboard.set_defaults(func=None, nle=None, inline=False, no_inline=False)
     run.set_defaults(func=None)
     return parser
+
+
+def _add_bg_flags(target: argparse.ArgumentParser) -> None:
+    target.add_argument("--bg", default=None, help="Image or video path, transparent, or keep.")
+    target.add_argument("--bg-model", default=None, choices=["u2net", "u2net_human_seg", "u2netp"])
+    target.add_argument("--bg-threshold", type=int, default=None, help="Matte luma cutoff, 0-255.")
+    target.add_argument("--bg-yes", action="store_true", help="Approve the background preview.")
+    target.add_argument("--bg-skip", action="store_true", help="Keep the original background.")
+    target.add_argument("--bg-engine", default=None, choices=["birefnet", "ben2", "u2net"])
+    target.add_argument("--bg-infer-size", type=int, default=None, help="Short side passed to the model. Default 320.")
+    target.add_argument("--bg-smooth", type=int, default=None, help="Temporal median window, 0–5. Default 3.")
+    target.add_argument("--bg-feather", type=int, default=None, help="Alpha blur radius, used only with --bg-refine.")
+    target.add_argument("--bg-refine", action="store_true", help="Blur the alpha. Off by default. Does not use a guided filter.")
 
 
 def _inline_flag(args: argparse.Namespace) -> bool | None:
@@ -625,7 +717,7 @@ def main(argv: list[str] | None = None) -> int:
                 inline=_inline_flag(args),
             )
         except UGCError as exc:
-            print(exc.text(_ui(args.ui, None)), file=sys.stderr)
+            _fail(args, exc)
             return 2
         ui = _ui(args.ui, None)
         _say(
@@ -633,18 +725,20 @@ def main(argv: list[str] | None = None) -> int:
             f"Storyboard: {len(story['tracks']['video'])} shots in {args.workdir}/export/",
             f"Guion gráfico: {len(story['tracks']['video'])} tomas en {args.workdir}/export/",
         )
+        _follow("storyboard", ui, _load_plan(Path(args.workdir)), Path(args.workdir))
         return 0
     if args.cmd == "export" and getattr(args, "nle", None):
         try:
             result = export_nle(Path(args.workdir), args.nle, _preset_from_args(args))
         except UGCError as exc:
-            print(exc.text(_ui(args.ui, None)), file=sys.stderr)
+            _fail(args, exc)
             return 2
         ui = _ui(args.ui, None)
         names = ", ".join(result["written"]) or "—"
         _say(ui, f"NLE export: {names}", f"Exportación NLE: {names}")
         for note in result["notes"]:
             print(note)
+        _follow("final", ui, _load_plan(Path(args.workdir)), Path(args.workdir))
         return 0
     try:
         workdir = Path(args.workdir)
@@ -683,8 +777,10 @@ def main(argv: list[str] | None = None) -> int:
                     "Stopped for approval (exit 10). Re-run with --from render --yes after confirming the hook.",
                     "Paré para tu aprobación (salida 10). Cuando confirmes el gancho, corre de nuevo con --from render --yes.",
                 )
+                _follow("hook", ui, plan, workdir)
                 return AWAITING
             if needs_approval:
+                _follow("hook", ui, plan, workdir)
                 return AWAITING
         elif (workdir / "plan.json").exists():
             plan = load_json(workdir / "plan.json")
@@ -696,10 +792,10 @@ def main(argv: list[str] | None = None) -> int:
                 status, payload = resolve_delivery(args, plan, preset)
                 if status == "ask":
                     print(delivery_questions(ui))
+                    _follow("delivery", ui, plan, workdir)
                     return AWAITING_DELIVERY
                 if status == "review":
                     plan["delivery"] = payload
-                    dump_json(workdir / "plan.json", plan)
                     write_storyboard(workdir, preset, None, inline=_inline_flag(args))
                     print(
                         storyboard_checkpoint(
@@ -708,10 +804,13 @@ def main(argv: list[str] | None = None) -> int:
                             str(workdir / "export" / "contact-sheet.jpg"),
                         )
                     )
+                    _follow("storyboard", ui, plan, workdir)
                     return AWAITING_STORYBOARD
                 plan["delivery"] = payload
                 dump_json(workdir / "plan.json", plan)
-            info = _do_render(args, preset, workdir, plan)
+            info = _do_render(args, preset, workdir, plan, ui)
+            if info.get("awaiting") == AWAITING_BG:
+                return AWAITING_BG
             _say(
                 ui,
                 f"Styled with {info['renderer']}.",
@@ -729,11 +828,34 @@ def main(argv: list[str] | None = None) -> int:
                 _say(ui, f"NLE export: {names}", f"Exportación NLE: {names}")
                 for note in result["notes"]:
                     print(note)
+        if until == "transcribe":
+            stage = "transcribe"
+        elif until == "plan":
+            stage = "hook"
+        elif until == "render":
+            stage = "render"
+        else:
+            stage = "final"
+        _follow(stage, ui, plan, workdir)
         return 0
     except UGCError as exc:
-        ui = _ui(getattr(args, "ui", "auto"), None)
-        print(exc.text(ui), file=sys.stderr)
+        _fail(args, exc)
         return 2
+
+
+def _load_plan(workdir: Path) -> dict | None:
+    path = workdir / "plan.json"
+    if not path.exists():
+        return None
+    return load_json(path)
+
+
+def _fail(args: argparse.Namespace, exc: UGCError) -> None:
+    ui = _ui(getattr(args, "ui", "auto"), None)
+    print(exc.text(ui), file=sys.stderr)
+    workdir = Path(args.workdir) if getattr(args, "workdir", None) else None
+    plan = _load_plan(workdir) if workdir else None
+    _follow("error", ui, plan, workdir, error=exc.text(ui))
 
 
 if __name__ == "__main__":

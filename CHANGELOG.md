@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.0
+
+- Optional background replacement with `backgroundremover` and U2-Net. The default model is `u2net`, not the person-only net, so a product in the hand is less likely to disappear. `--bg`, `--bg transparent`, and `--bg-threshold` run after the cuts and before captions. Exit 13 shows side-by-side preview frames. `./install.sh --with-bg` installs it. `export --nle` also copies the alpha, the matte, and the plate.
+- Every stage prints a `next_steps` list in the clip's language and stores it on `plan.json`.
+- Frame-by-frame removal can flicker. Apple Silicon speed was not tested. Grounded-SAM-2 is the next step if a hand-held product still drops out.
+- Preview times stop two frames before the end, JPEG previews are full-range, and one missed frame does not abort the preview. ffmpeg failures stay short and point at `ugc-ffmpeg.log`.
+- A storyboard rewrite keeps existing vision labels. An unchanged cut is not encoded again, so approving the background does not rerun U2-Net.
+- When the Python package imports, U2-Net runs at `bg.infer_size` (default 320, aspect kept) instead of backgroundremover's 320-square path, then a temporal median and a close. The guided filter is off. Timings are printed, including when a matte is reused.
+- `bg.engine` selects `birefnet` (default, MIT `ZhengPeng7/BiRefNet_lite` revision `aa62cd87eafb`), `ben2` (optional MIT base), or `u2net`. Device order is MPS, then CUDA, then CPU. On a real 11 s clip (331 frames, CPU, short side 320) BiRefNet_lite took about 1.05 s/frame, about 6 minutes. The U2-Net CLI took about 72 s. Apple Silicon MPS was not timed. A black shirt, a black product box, and a waving hand stayed solid; a brief leak around 5.0 s during a lift remained.
+- `./install.sh --with-bg` no longer pins `numpy<2`. If those packages fail, the script exits non-zero. Exit 13 names the engine that ran, and its follow-ups are `--bg-engine u2net`, `--bg-engine ben2`, `--bg-infer-size`, and `--bg-smooth`.
+
 ## 0.2.2
 
 - `storyboard --inline` writes `storyboard.inline.html`: one file, inline CSS, JPEG thumbnails as data URIs, no network. The local `storyboard.html` plus `thumbs/` stays the default. `storyboard.md` is a chat summary.

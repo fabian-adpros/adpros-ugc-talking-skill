@@ -61,13 +61,20 @@ if [[ "${INSTALL_WHISPERX:-0}" == "1" ]]; then
 fi
 
 WITH_OTIO=0
+WITH_BG=0
 for arg in "$@"; do
   if [[ "$arg" == "--with-otio" ]]; then
     WITH_OTIO=1
   fi
+  if [[ "$arg" == "--with-bg" ]]; then
+    WITH_BG=1
+  fi
 done
 if [[ "${INSTALL_OTIO:-0}" == "1" ]]; then
   WITH_OTIO=1
+fi
+if [[ "${INSTALL_BG:-0}" == "1" ]]; then
+  WITH_BG=1
 fi
 if [[ "$WITH_OTIO" == "1" ]]; then
   log "Optional OpenTimelineIO adapters"
@@ -77,6 +84,21 @@ if [[ "$WITH_OTIO" == "1" ]]; then
     'otio-fcp-adapter' \
     'otio-fcpx-xml-adapter' \
     || echo "OpenTimelineIO extras did not fully install. Premiere and FCPXML via auto-editor still work."
+fi
+
+if [[ "$WITH_BG" == "1" ]]; then
+  log "Optional background removal (CPU PyTorch, BiRefNet_lite, U2-Net fallback)"
+  if ! "$SKILL_DIR/.venv/bin/pip" install torch torchvision --index-url https://download.pytorch.org/whl/cpu \
+    || ! "$SKILL_DIR/.venv/bin/pip" install numpy 'transformers>=4.44' timm kornia einops pillow backgroundremover; then
+    echo "Background extras failed to install. ./install.sh --with-bg did not finish. doctor will show birefnet as not installed." >&2
+    exit 1
+  fi
+  echo "First BiRefNet run downloads ZhengPeng7/BiRefNet_lite revision aa62cd87eafb (MIT code and MIT weights)."
+  echo "A Hub login is optional. Set HF_TOKEN if you want a higher rate limit. The skill trusts that repo."
+  echo "U2-Net weights (about 176 MB, Apache-2.0) download into ~/.u2net if that fallback runs."
+  echo "BEN2 base is optional and MIT (PramaLLC/BEN2). It is not installed here: pip install the ben2 package if you want --bg-engine ben2."
+  echo "Device order is MPS, then CUDA, then CPU. This install path is the CPU wheel. Apple Silicon speed was not measured."
+  echo "On a measured CPU run, BiRefNet_lite at short side 320 took about 1.05 s/frame (about 6 minutes for 331 frames). The U2-Net CLI took about 72 s on the same 11 s clip."
 fi
 
 log "Remotion template"
@@ -102,6 +124,10 @@ Activate the venv when you call the pipeline yourself:
 
 WhisperX is optional. Install it with INSTALL_WHISPERX=1 ./install.sh
 OpenTimelineIO is optional. Install it with ./install.sh --with-otio
+Background removal is optional. Install it with ./install.sh --with-bg
+That pulls CPU torch, BiRefNet_lite's runtime (transformers, timm, kornia), and backgroundremover.
+The default engine is BiRefNet_lite when those imports work, otherwise U2-Net.
+BEN2 is a separate optional MIT model (--bg-engine ben2) and is not installed by this flag.
 The OpenTimelineIO-Plugins meta-package does not include otio-fcpx-xml-adapter, so --with-otio installs that adapter by name.
 ffmpeg is the caption fallback when Node or Remotion is missing.
 auto-editor is the silence engine when it is installed; word gaps are the fallback.

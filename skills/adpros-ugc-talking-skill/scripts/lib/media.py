@@ -10,6 +10,20 @@ from pathlib import Path
 from .util import UGCError, prepend_tool_paths
 
 
+def _failure_log(cmd: list[str], completed: subprocess.CompletedProcess[str]) -> Path:
+    last = Path(cmd[-1]) if cmd else Path("ugc-cmd.log")
+    folder = last.parent if last.suffix and last.parent.exists() else Path.cwd()
+    path = folder / "ugc-ffmpeg.log"
+    body = (completed.stderr or "") + ("\n" + completed.stdout if completed.stdout else "")
+    path.write_text(body[-200_000:], encoding="utf-8", errors="replace")
+    return path
+
+
+def _tail_lines(text: str, count: int = 6) -> str:
+    lines = [line.strip() for line in (text or "").splitlines() if line.strip()]
+    return "\n".join(lines[-count:])
+
+
 def run_cmd(cmd: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
     try:
         completed = subprocess.run(
@@ -25,11 +39,14 @@ def run_cmd(cmd: list[str], cwd: Path | None = None) -> subprocess.CompletedProc
             f"No está el comando: {cmd[0]}",
         ) from exc
     if completed.returncode != 0:
-        tail = (completed.stderr or completed.stdout or "")[-2500:]
-        raise UGCError(
-            f"{cmd[0]} failed ({completed.returncode}).\n{tail}",
-            f"{cmd[0]} falló ({completed.returncode}).\n{tail}",
-        )
+        log_path = _failure_log(cmd, completed)
+        tail = _tail_lines(completed.stderr or completed.stdout or "")
+        message = f"{cmd[0]} failed ({completed.returncode}). Log: {log_path}."
+        if tail:
+            message = f"{message}\n{tail}"
+        if len(message) > 500:
+            message = message[:500] + "…"
+        raise UGCError(message, message)
     return completed
 
 

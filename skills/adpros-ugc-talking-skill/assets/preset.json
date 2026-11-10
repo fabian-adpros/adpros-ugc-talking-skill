@@ -59,6 +59,20 @@
     "editors": ["premiere", "fcpx", "resolve"],
     "review_storyboard": false
   },
+  "bg": {
+    "enabled": false,
+    "mode": "keep",
+    "file": null,
+    "engine": "birefnet",
+    "model": "u2net",
+    "threshold": null,
+    "infer_size": 320,
+    "temporal_smooth": 3,
+    "smooth_mode": "median",
+    "morph_close": 1,
+    "feather": 0,
+    "refine": false
+  },
   "transcription": {
     "engine": "auto",
     "model": null,

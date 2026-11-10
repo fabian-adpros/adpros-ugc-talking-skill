@@ -36,6 +36,8 @@ Produced before the render. This is the approval payload.
 - `hook`: `{text, start, end, alternates, reason}`
 - `trim`: `{max_duration, will_trim}`
 - `warnings[]`
+- `bg`: `{enabled, mode, file, model, engine, engine_used, threshold, approved, previews[], infer_size, temporal_smooth, smooth_mode, morph_close, feather, refine, timings}`. `engine` is `birefnet`, `ben2`, or `u2net`. `infer_size` is the short side (default 320). `refine` is false. `timings` has `path`, `engine`, `infer_s`, `per_frame_s`, `frames`, `reused`.
+- `next_steps[]`: `{n, id, en, es, command}` for the latest stage. Both languages are stored. The command prints the one that matches the clip.
 
 ## props.json
 
