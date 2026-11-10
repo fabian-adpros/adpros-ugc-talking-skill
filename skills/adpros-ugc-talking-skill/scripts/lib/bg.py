@@ -20,6 +20,7 @@ import subprocess
 import time
 from pathlib import Path
 
+from .engine import pick_device, predict_masks, select_engine, u2net_python_available
 from .matte import smooth_alpha, working_size
 from .media import probe, run_cmd
 from .render import cut_stamp_path
@@ -63,6 +64,9 @@ def resolve_bg(args, preset: dict, plan: dict | None) -> dict:
                 "El umbral del fondo tiene que estar entre 0 y 255.",
             )
     settings = _settings(args, saved, cfg)
+    engine, explicit = _pick_engine(args, saved, cfg)
+    settings["engine"] = engine
+    settings["engine_explicit"] = explicit
     if skip or flag == "keep":
         return _state(False, "keep", None, model, threshold, True, [], settings)
 
@@ -104,10 +108,26 @@ def resolve_bg(args, preset: dict, plan: dict | None) -> dict:
     return state
 
 
+def _pick_engine(args, saved: dict, cfg: dict) -> tuple[str, bool]:
+    flag = getattr(args, "bg_engine", None)
+    if flag:
+        return str(flag), True
+    if saved.get("engine"):
+        return str(saved["engine"]), bool(saved.get("engine_explicit"))
+    return str(cfg.get("engine") or "birefnet"), False
+
+
 def _settings(args, saved: dict, cfg: dict) -> dict:
-    infer_size = _pick_int(args, "bg_infer_size", saved, cfg, "infer_size", 512)
+    infer_size = _pick_int(args, "bg_infer_size", saved, cfg, "infer_size", 320)
     temporal = _pick_int(args, "bg_smooth", saved, cfg, "temporal_smooth", 3)
-    feather = _pick_int(args, "bg_feather", saved, cfg, "feather", 1)
+    feather = _pick_int(args, "bg_feather", saved, cfg, "feather", 0)
+    refine_flag = getattr(args, "bg_refine", None)
+    if refine_flag:
+        refine = True
+    elif "refine" in saved:
+        refine = bool(saved.get("refine"))
+    else:
+        refine = bool(cfg.get("refine", False))
     morph = saved.get("morph_close", cfg.get("morph_close", 1))
     morph = 1 if morph is None else int(morph)
     mode = saved.get("smooth_mode") or cfg.get("smooth_mode") or "median"
@@ -137,6 +157,7 @@ def _settings(args, saved: dict, cfg: dict) -> dict:
         "smooth_mode": mode,
         "morph_close": int(morph),
         "feather": int(feather),
+        "refine": bool(refine),
     }
 
 
@@ -155,6 +176,8 @@ def _choice_changed(args, saved: dict, flag, file, mode: str) -> bool:
     if getattr(args, "bg_model", None) and getattr(args, "bg_model") != saved.get("model"):
         return True
     if getattr(args, "bg_threshold", None) is not None and int(args.bg_threshold) != saved.get("threshold"):
+        return True
+    if getattr(args, "bg_engine", None) and getattr(args, "bg_engine") != saved.get("engine"):
         return True
     if getattr(args, "bg_infer_size", None) is not None and int(args.bg_infer_size) != saved.get("infer_size"):
         return True
@@ -180,11 +203,14 @@ def _state(enabled, mode, file, model, threshold, approved, previews, settings: 
         "threshold": threshold,
         "approved": bool(approved),
         "previews": previews,
-        "infer_size": 512,
+        "infer_size": 320,
         "temporal_smooth": 3,
         "smooth_mode": "median",
         "morph_close": 1,
-        "feather": 1,
+        "feather": 0,
+        "refine": False,
+        "engine": "birefnet",
+        "engine_explicit": False,
     }
     if settings:
         state.update(settings)
@@ -209,40 +235,52 @@ def write_matte(src: Path, dest: Path, model: str = "u2net") -> None:
         )
 
 
-def python_matte_available() -> bool:
-    try:
-        import torch  # noqa: F401
-        from backgroundremover.u2net import detect  # noqa: F401
-    except Exception:
-        return False
-    return True
-
-
 def render_matte(src: Path, dest: Path, state: dict) -> None:
-    """Write the matte. Prefer a sized U2-Net pass; otherwise the CLI at height 320."""
+    """Write a matte at the cut's size. The guided filter is not used."""
+    _bind_engine(state)
+    engine = state.get("engine_used") or "u2net"
     started = time.perf_counter()
-    if python_matte_available():
-        infer_matte(src, dest, state)
+    if engine != "u2net" or u2net_python_available():
+        try:
+            infer_matte(src, dest, state)
+        except UGCError:
+            raise
+        except Exception as exc:
+            raise UGCError(
+                f"Background model {engine} failed ({exc}). Try --bg-engine u2net or ./install.sh --with-bg.",
+                f"Falló el modelo de fondo {engine} ({exc}). Prueba --bg-engine u2net o ./install.sh --with-bg.",
+            ) from exc
         refine_started = time.perf_counter()
-        refine_matte(src, dest, {**state, "temporal_smooth": 0})
+        fit_matte(src, dest, {**state, "temporal_smooth": 0})
         state["timings"]["refine_s"] = round(time.perf_counter() - refine_started, 3)
         state["timings"]["total_s"] = round(time.perf_counter() - started, 3)
     else:
         write_matte(src, dest, state.get("model") or "u2net")
         infer_s = round(time.perf_counter() - started, 3)
         refine_started = time.perf_counter()
-        refine_matte(src, dest, state)
+        fit_matte(src, dest, state)
         state["timings"] = {
             "path": "cli",
+            "engine": "u2net",
             "device": "cli",
             "infer_s": infer_s,
             "refine_s": round(time.perf_counter() - refine_started, 3),
             "infer_size": None,
             "frames": None,
             "reused": False,
-            "note": "backgroundremover CLI resizes to height 320 and squares to 320. The Python API was not importable.",
+            "note": "backgroundremover CLI resizes to height 320 and squares to 320. No Python engine was importable.",
         }
     _print_timings(state)
+
+
+def _bind_engine(state: dict) -> None:
+    if state.get("engine_used"):
+        return
+    engine, note = select_engine(state.get("engine") or "birefnet", bool(state.get("engine_explicit")))
+    state["engine_used"] = engine
+    state["engine_note"] = note
+    if note:
+        print("bg: " + note)
 
 
 def _print_timings(state: dict) -> None:
@@ -254,47 +292,40 @@ def _print_timings(state: dict) -> None:
         "bg: "
         f"path={timings.get('path')} device={timings.get('device')} "
         f"infer_size={timings.get('infer_size')} frames={timings.get('frames')} "
-        f"infer={timings.get('infer_s')}s smooth={timings.get('smooth_s')}s "
-        f"refine={timings.get('refine_s')}s"
+        f"engine={timings.get('engine')} "
+        f"infer={timings.get('infer_s')}s per_frame={timings.get('per_frame_s')}s "
+        f"smooth={timings.get('smooth_s')}s fit={timings.get('refine_s')}s"
     )
 
 
-def refine_matte(cut: Path, matte: Path, state: dict) -> None:
-    temporal = int(state.get("temporal_smooth") or 0)
-    morph = int(state.get("morph_close") or 0)
-    feather = int(state.get("feather") or 0)
-    if temporal <= 1 and morph <= 0 and feather <= 0:
-        return
+def fit_matte(cut: Path, matte: Path, state: dict) -> None:
+    """Scale the matte to the cut, then optional close and a small blur. No guided filter."""
     if not matte.exists():
         return
-    chain = ["format=gray"]
+    info = probe(cut)
+    width = int(info["width"])
+    height = int(info["height"])
+    chain = [f"scale={width}:{height}:flags=lanczos", "format=gray"]
+    temporal = int(state.get("temporal_smooth") or 0)
     if temporal >= 3:
         chain.append(f"tmix=frames={int(temporal)}")
-    for _ in range(morph):
+    for _ in range(max(0, int(state.get("morph_close") or 0))):
         chain.append("dilation")
         chain.append("erosion")
-    refined = matte.with_name(matte.stem + "-refined.mp4")
-    if feather > 0:
-        radius = max(1, min(int(feather), 8))
-        graph = (
-            f"[1:v]{','.join(chain)}[m];"
-            "[0:v]format=gray[g];"
-            f"[m][g]guided=radius={radius}:eps=0.02:guidance=on:mode=fast,format=gray[v]"
-        )
-    else:
-        graph = f"[1:v]{','.join(chain)},format=gray[v]"
+    # Guided refine copied the picture into the mask. It stays off unless bg.refine is set,
+    # and then it is only a blur of the alpha.
+    if state.get("refine") and int(state.get("feather") or 0) > 0:
+        sigma = max(0.4, min(float(state["feather"]), 3.0))
+        chain.append(f"gblur=sigma={sigma}")
+    fitted = matte.with_name(matte.stem + "-fitted.mp4")
     run_cmd(
         [
             "ffmpeg",
             "-y",
             "-i",
-            str(cut),
-            "-i",
             str(matte),
-            "-filter_complex",
-            graph,
-            "-map",
-            "[v]",
+            "-vf",
+            ",".join(chain),
             "-an",
             "-c:v",
             "libx264",
@@ -304,20 +335,19 @@ def refine_matte(cut: Path, matte: Path, state: dict) -> None:
             "18",
             "-pix_fmt",
             "yuv420p",
-            str(refined),
+            str(fitted),
         ]
     )
-    refined.replace(matte)
+    fitted.replace(matte)
 
 
 def infer_matte(src: Path, dest: Path, state: dict) -> None:
-    """Run U2-Net at `infer_size` (short side). The package itself has no size flag."""
+    """Run the selected engine at `infer_size` (short side, aspect kept)."""
     import numpy as np
-    import torch
-    from backgroundremover.u2net import detect
 
+    _bind_engine(state)
     info = probe(src)
-    width, height = working_size(int(info["width"]), int(info["height"]), int(state.get("infer_size") or 512))
+    width, height = working_size(int(info["width"]), int(info["height"]), int(state.get("infer_size") or 320))
     fps = float(info.get("fps") or 30)
     frame_bytes = width * height * 3
     log_path = dest.with_name("bg-infer.log")
@@ -354,11 +384,16 @@ def infer_matte(src: Path, dest: Path, state: dict) -> None:
             f"Could not read frames for the matte. See {log_path}.",
             f"No se pudieron leer los cuadros del mate. Mira {log_path}.",
         )
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    net = detect.load_model(model_name=state.get("model") or "u2net")
-    net.to(device)
-    net.eval()
-    masks = [_mask_from_frame(net, frame, device) for frame in frames]
+    device = pick_device()
+    try:
+        masks = predict_masks(frames, state.get("engine_used") or "u2net", state.get("model") or "u2net", device)
+    except UGCError:
+        raise
+    except Exception as exc:
+        raise UGCError(
+            f"Background model {state.get('engine_used')} failed ({exc}). Try --bg-engine u2net.",
+            f"Falló el modelo {state.get('engine_used')} ({exc}). Prueba --bg-engine u2net.",
+        ) from exc
     infer_s = round(time.perf_counter() - started, 3)
     smooth_started = time.perf_counter()
     volume = np.stack(masks, axis=0)
@@ -406,37 +441,18 @@ def infer_matte(src: Path, dest: Path, state: dict) -> None:
             f"Could not write the matte. See {log_path}.",
             f"No se pudo escribir el mate. Mira {log_path}.",
         )
+    per_frame = round(infer_s / max(1, len(masks)), 4)
     state["timings"] = {
         "path": "python",
+        "engine": state.get("engine_used"),
         "device": str(device),
         "infer_s": infer_s,
+        "per_frame_s": per_frame,
         "smooth_s": smooth_s,
         "frames": len(masks),
         "infer_size": [width, height],
         "reused": False,
     }
-
-
-def _mask_from_frame(net, frame, device):
-    import numpy as np
-    import torch
-
-    image = frame.astype(np.float32)
-    peak = float(image.max()) or 1.0
-    image = image / peak
-    mean = (0.485, 0.456, 0.406)
-    std = (0.229, 0.224, 0.225)
-    for channel in range(3):
-        image[:, :, channel] = (image[:, :, channel] - mean[channel]) / std[channel]
-    tensor = torch.from_numpy(np.ascontiguousarray(image.transpose(2, 0, 1))).unsqueeze(0).to(device)
-    with torch.no_grad():
-        out = net(tensor)
-        pred = out[0] if isinstance(out, (tuple, list)) else out
-        pred = pred[:, 0]
-        high = torch.max(pred)
-        low = torch.min(pred)
-        pred = (pred - low) / (high - low + 1e-8)
-        return (pred * 255).clamp(0, 255).to(torch.uint8).cpu().numpy()[0]
 
 
 def subject_from_matte(cut: Path, matte: Path, dest: Path, threshold: int | None) -> None:
@@ -661,11 +677,13 @@ def _matte_key(cut: Path, state: dict) -> str:
     fields = {
         "cut": _cut_identity(cut),
         "model": state.get("model"),
+        "engine": state.get("engine_used") or state.get("engine"),
         "infer_size": state.get("infer_size"),
         "temporal_smooth": state.get("temporal_smooth"),
         "smooth_mode": state.get("smooth_mode"),
         "morph_close": state.get("morph_close"),
         "feather": state.get("feather"),
+        "refine": bool(state.get("refine")),
     }
     return "|".join(f"{key}={fields[key]}" for key in sorted(fields))
 
@@ -679,6 +697,7 @@ def ensure_subject(cut: Path, workdir: Path, state: dict) -> Path:
     matte = workdir / "matte.mp4"
     matte_stamp = workdir / "bg-matte-stamp.txt"
     subject_stamp = workdir / "bg-stamp.txt"
+    _bind_engine(state)
     matte_key = _matte_key(cut, state)
     subject_key = _subject_key(cut, state)
     matte_ready = matte.exists() and matte_stamp.exists() and matte_stamp.read_text(encoding="utf-8").strip() == matte_key
@@ -690,6 +709,7 @@ def ensure_subject(cut: Path, workdir: Path, state: dict) -> Path:
     ):
         state["timings"] = dict(state.get("timings") or {})
         state["timings"]["reused"] = True
+        _print_timings(state)
         return subject
     if not matte_ready:
         render_matte(cut, matte, state)

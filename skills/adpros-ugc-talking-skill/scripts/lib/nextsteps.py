@@ -28,11 +28,29 @@ def _error_advice(error: str | None) -> tuple[str, str, str | None]:
             "El JPEG de la vista previa fue rechazado por el rango YUV. Vuelve a correr el mismo comando.",
             "run --from render",
         )
-    if "no preview frame" in low or "nothing was written" in low:
+    if "width and height of input videos must be same" in low or "parsed_guided" in low:
+        return (
+            "The matte and the cut were different sizes. Re-run; the matte is scaled to the cut, and the guided filter stays off.",
+            "El mate y el corte tenían tamaños distintos. Vuelve a correr; el mate se escala al corte y el filtro guiado queda apagado.",
+            "run --from render",
+        )
+    if "matte smoothing failed" in low or "truth value of an array" in low:
+        return (
+            "Matte smoothing failed. Re-run with --bg-smooth 0, or update past this build.",
+            "Falló el suavizado del mate. Vuelve a correr con --bg-smooth 0.",
+            "--bg-smooth 0",
+        )
+    if "no preview frame" in low:
         return (
             "A preview time was past the last frame. Re-run; times now stop two frames before the end.",
             "Un tiempo de la vista previa quedó después del último cuadro. Vuelve a correr.",
             "run --from render",
+        )
+    if "background model" in low or "--bg-engine" in low:
+        return (
+            "The background model failed. Install it with ./install.sh --with-bg, or re-run with --bg-engine u2net.",
+            "Falló el modelo de fondo. Instálalo con ./install.sh --with-bg, o vuelve a correr con --bg-engine u2net.",
+            "--bg-engine u2net",
         )
     if "backgroundremover" in low or "--with-bg" in low:
         return (

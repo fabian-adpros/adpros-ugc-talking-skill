@@ -54,7 +54,9 @@ The composite after that matte is ffmpeg, and that path was run here on ffmpeg 6
 
 Preview JPEGs append `format=yuvj420p` and `-strict unofficial`. ffmpeg 7.1 rejects TV-range YUV in mjpeg unless that is set. That ffmpeg 7.1 case was reported from a real run and was not re-executed on the ffmpeg 6.1.1 used for these tests.
 
-`backgroundremover` `Net.forward` interpolates to 320×320, `iter_frames` resizes to height 320, and `RescaleT` also squares to 320. None of those take a size argument. The sized pass is this skill's Python call when the package imports. It was not timed here because torch and the weights are not installed in this environment. A real 11s clip on CPU torch 2.15 was reported at about 72s for the CLI path.
+`backgroundremover` `Net.forward` interpolates to 320×320, `iter_frames` resizes to height 320, and `RescaleT` also squares to 320. None of those take a size argument. The sized pass is this skill's Python call when the package imports.
+
+BiRefNet_lite was run here on CPU torch 2.15, ffmpeg 6.1.1, on an 8-frame synthetic 180×320 clip (white field, black rectangle). `infer_size` 320 became 320×576. Inference was 9.1 s for 8 frames, about 1.13 s/frame, after the MIT weights were already cached. The black rectangle landed at mask value 255 and a corner of the white field at 1. The fitted matte matched the cut size, 180×320. An 11 s / 331-frame clip at that rate is on the order of 6 minutes. That full clip was not run here. The guided filter is not called.
 
 ## faster-whisper 1.2.1
 

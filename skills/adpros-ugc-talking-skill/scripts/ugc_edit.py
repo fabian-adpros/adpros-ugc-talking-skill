@@ -42,6 +42,7 @@ from lib.bg import (  # noqa: E402
     prepare_picture,
     resolve_bg,
 )
+from lib.engine import ben2_available, birefnet_available  # noqa: E402
 from lib.delivery import (  # noqa: E402
     AWAITING_DELIVERY,
     AWAITING_STORYBOARD,
@@ -557,9 +558,16 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     add(
         "backgroundremover",
         bool(bg_bin),
-        bg_bin or "not installed; ./install.sh --with-bg (u2net weights, about 176 MB, into ~/.u2net)",
+        bg_bin or "not installed; ./install.sh --with-bg (u2net fallback, about 176 MB into ~/.u2net)",
         False,
     )
+    add(
+        "birefnet",
+        birefnet_available(),
+        "ZhengPeng7/BiRefNet_lite MIT" if birefnet_available() else "not installed; ./install.sh --with-bg",
+        False,
+    )
+    add("ben2", ben2_available(), "optional PramaLLC/BEN2 MIT base" if ben2_available() else "not installed", False)
     failed = False
     for name, ok, detail, required in rows:
         mark = "ok" if ok else ("MISSING" if required else "optional")
@@ -643,6 +651,8 @@ def build_parser() -> argparse.ArgumentParser:
             bg_infer_size=None,
             bg_smooth=None,
             bg_feather=None,
+            bg_engine=None,
+            bg_refine=False,
         )
     storyboard = sub.add_parser("storyboard")
     storyboard.add_argument("--workdir", required=True)
@@ -662,9 +672,11 @@ def _add_bg_flags(target: argparse.ArgumentParser) -> None:
     target.add_argument("--bg-threshold", type=int, default=None, help="Matte luma cutoff, 0-255.")
     target.add_argument("--bg-yes", action="store_true", help="Approve the background preview.")
     target.add_argument("--bg-skip", action="store_true", help="Keep the original background.")
-    target.add_argument("--bg-infer-size", type=int, default=None, help="U2-Net short side. Default 512.")
+    target.add_argument("--bg-engine", default=None, choices=["birefnet", "ben2", "u2net"])
+    target.add_argument("--bg-infer-size", type=int, default=None, help="Short side passed to the model. Default 320.")
     target.add_argument("--bg-smooth", type=int, default=None, help="Temporal median window, 0–5. Default 3.")
-    target.add_argument("--bg-feather", type=int, default=None, help="Guided-feather radius, 0–8. Default 1.")
+    target.add_argument("--bg-feather", type=int, default=None, help="Alpha blur radius, used only with --bg-refine.")
+    target.add_argument("--bg-refine", action="store_true", help="Blur the alpha. Off by default. Does not use a guided filter.")
 
 
 def _inline_flag(args: argparse.Namespace) -> bool | None:

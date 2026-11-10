@@ -87,12 +87,15 @@ if [[ "$WITH_OTIO" == "1" ]]; then
 fi
 
 if [[ "$WITH_BG" == "1" ]]; then
-  log "Optional background removal (CPU PyTorch + backgroundremover)"
+  log "Optional background removal (CPU PyTorch, BiRefNet_lite, U2-Net fallback)"
   "$SKILL_DIR/.venv/bin/pip" install torch torchvision --index-url https://download.pytorch.org/whl/cpu \
-    && "$SKILL_DIR/.venv/bin/pip" install backgroundremover \
-    || echo "backgroundremover did not install. The rest of the pipeline still works. Re-run ./install.sh --with-bg."
-  echo "The first backgroundremover run downloads the u2net weights (about 176 MB) into ~/.u2net."
-  echo "Apple Silicon speed was not tested. PyTorch may use MPS there; this install path is the CPU wheel."
+    && "$SKILL_DIR/.venv/bin/pip" install 'numpy<2' 'transformers>=4.44' timm kornia einops pillow backgroundremover \
+    || echo "Background extras did not fully install. Re-run ./install.sh --with-bg. U2-Net remains the fallback when BiRefNet cannot import."
+  echo "First BiRefNet run downloads ZhengPeng7/BiRefNet_lite (MIT code and MIT weights) from Hugging Face."
+  echo "U2-Net weights (about 176 MB, Apache-2.0) download into ~/.u2net if that fallback runs."
+  echo "BEN2 base is optional and MIT (PramaLLC/BEN2). It is not installed here: pip install the ben2 package if you want --bg-engine ben2."
+  echo "Device order is MPS, then CUDA, then CPU. This install path is the CPU wheel. Apple Silicon speed was not measured."
+  echo "On CPU, BiRefNet_lite at short side 320 is slower per frame than U2-Net. Short side 1024 is much slower. Default infer_size is 320."
 fi
 
 log "Remotion template"
@@ -119,7 +122,9 @@ Activate the venv when you call the pipeline yourself:
 WhisperX is optional. Install it with INSTALL_WHISPERX=1 ./install.sh
 OpenTimelineIO is optional. Install it with ./install.sh --with-otio
 Background removal is optional. Install it with ./install.sh --with-bg
-That pulls CPU torch and backgroundremover. The first run downloads u2net (about 176 MB) into ~/.u2net.
+That pulls CPU torch, BiRefNet_lite's runtime (transformers, timm, kornia), and backgroundremover.
+The default engine is BiRefNet_lite when those imports work, otherwise U2-Net.
+BEN2 is a separate optional MIT model (--bg-engine ben2) and is not installed by this flag.
 The OpenTimelineIO-Plugins meta-package does not include otio-fcpx-xml-adapter, so --with-otio installs that adapter by name.
 ffmpeg is the caption fallback when Node or Remotion is missing.
 auto-editor is the silence engine when it is installed; word gaps are the fallback.

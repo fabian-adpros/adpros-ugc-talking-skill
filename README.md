@@ -219,7 +219,7 @@ flowchart TD
 - El lugar de los subtítulos, el gancho en libass y el candado de sincronía se probaron con ffmpeg en Linux. No se volvieron a correr en macOS.
 - `captions.y_ratio` es fijo. En un reveal el subtítulo puede tapar el producto. No hay seguimiento del objeto.
 - El skill no traduce. Un clip en español sale en español.
-- Quitar el fondo puede parpadear en un producto en la mano. Por defecto U2-Net corre al lado corto 512 (no al cuadrado de 320 del CLI) y suaviza 3 cuadros. Si aún parpadea, el siguiente paso es Grounded-SAM-2. Apple Silicon no se probó. El maestro con alfa no lleva los subtítulos quemados; van en el MP4 y en el SRT.
+- El motor por defecto es BiRefNet_lite (MIT) cuando está instalado; si no, U2-Net. El lado corto por defecto es 320. El filtro guiado no se usa. Si un producto negro sigue desapareciendo, el siguiente paso es Grounded-SAM-2. Apple Silicon no se midió. El maestro con alfa no lleva los subtítulos quemados; van en el MP4 y en el SRT.
 - Cada comando imprime `next_steps` en el idioma del clip (inglés o español) y lo guarda en `plan.json`.
 
 ### Roadmap (fase 2)
@@ -246,6 +246,8 @@ Este repositorio es MIT. Copyright 2026 Fabián. Ver `LICENSE`.
 | [Remotion](https://www.remotion.dev/docs/license) | Licencia Remotion, no es OSI | Gratis para una persona o una empresa de hasta 3 personas, también en uso comercial. Empresas más grandes necesitan Company License |
 | [backgroundremover](https://github.com/nadermx/backgroundremover) | MIT | Opcional. Quitar fondo. `./install.sh --with-bg` |
 | Pesos U2-Net | Apache-2.0 | Se bajan a `~/.u2net` la primera vez. No van en el repo |
+| [BiRefNet_lite](https://huggingface.co/ZhengPeng7/BiRefNet_lite) | MIT | Código y pesos MIT. Motor por defecto si importa. No va en el repo |
+| [BEN2 base](https://huggingface.co/PramaLLC/BEN2) | MIT | Opcional (`--bg-engine ben2`). El modelo comercial no es este paquete |
 | [Inter](https://github.com/rsms/inter) | SIL OFL 1.1 | `assets/fonts/`, ver `OFL.txt` |
 | React | MIT | Dependencia de la plantilla |
 
@@ -480,7 +482,7 @@ Run `./doctor.sh` first. A quiet first transcription is the model download. Exit
 - Caption placement, the libass hook, and the sync lock were checked with ffmpeg on Linux. They were not run again on macOS.
 - `captions.y_ratio` is a fixed line. During a product reveal the captions can cover the product. There is no object tracking.
 - The skill does not translate. A Spanish clip stays in Spanish.
-- Background removal can still flicker on a product in the hand. The default runs U2-Net at a short side of 512 (not the CLI's 320 square) and smooths 3 frames. If it still flickers, Grounded-SAM-2 is the next step. Apple Silicon was not tested. The alpha master does not have burned-in captions; those are on the MP4 and in the SRT.
+- The default engine is BiRefNet_lite (MIT) when it is installed, otherwise U2-Net. The default short side is 320. The guided filter is not used. If a black product still disappears, Grounded-SAM-2 is the next step. Apple Silicon was not measured. The alpha master does not have burned-in captions; those are on the MP4 and in the SRT.
 - Every command prints `next_steps` in the clip language (English or Spanish) and stores the list on `plan.json`.
 
 ### Roadmap (phase 2)
@@ -507,6 +509,8 @@ This repo is MIT. Copyright 2026 Fabián. See `LICENSE`.
 | [Remotion](https://www.remotion.dev/docs/license) | Remotion License, not OSI open source | Free for an individual or a company of up to 3 people, including commercial use. Larger companies need a Company License |
 | [backgroundremover](https://github.com/nadermx/backgroundremover) | MIT | Optional background removal. `./install.sh --with-bg` |
 | U2-Net weights | Apache-2.0 | Downloaded into `~/.u2net` on first use. Not committed |
+| [BiRefNet_lite](https://huggingface.co/ZhengPeng7/BiRefNet_lite) | MIT | Code and weights are MIT. Default engine when it imports. Not committed |
+| [BEN2 base](https://huggingface.co/PramaLLC/BEN2) | MIT | Optional (`--bg-engine ben2`). The commercial model is not this package |
 | [Inter](https://github.com/rsms/inter) | SIL OFL 1.1 | `assets/fonts/`, see `OFL.txt` |
 | React | MIT | Template dependency |
 

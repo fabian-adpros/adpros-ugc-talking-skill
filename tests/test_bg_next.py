@@ -18,14 +18,19 @@ sys.path.insert(0, str(ROOT))
 
 from lib.bg import (  # noqa: E402
     composite_subject,
+    ensure_subject,
     export_bg_layers,
+    fit_matte,
     preview_times,
     product_times,
     resolve_bg,
     side_by_side_frames,
     subject_from_matte,
     write_matte,
+    _matte_key,
+    _subject_key,
 )
+from lib.engine import predict_masks, select_engine  # noqa: E402
 from lib.config import DEFAULTS  # noqa: E402
 from lib.matte import morph_close, smooth_alpha, working_size  # noqa: E402
 from lib.media import run_cmd  # noqa: E402
@@ -465,3 +470,91 @@ def test_smooth_alpha_fills_a_one_frame_hole():
     assert height % 32 == 0 and width % 32 == 0
     assert height > width
     assert abs((height / width) - (1920 / 1080)) < 0.05
+    assert working_size(1080, 1920, 320)[0] == 320
+
+
+def test_ndarray_smooth_matches_the_list_path_on_an_even_edge():
+    numpy = pytest.importorskip("numpy")
+    frames = [[[255]], [[0]], [[255]]]
+    volume = numpy.array(frames, dtype=numpy.uint8)
+    array_out = smooth_alpha(volume, window=3, mode="median")
+    list_out = smooth_alpha(frames, window=3, mode="median")
+    assert int(array_out[0, 0, 0]) == list_out[0][0][0] == 255
+    assert int(array_out[1, 0, 0]) == 255
+    empty = numpy.zeros((0, 1, 1), dtype=numpy.uint8)
+    assert smooth_alpha(empty, 3).shape[0] == 0
+
+
+def test_size_mismatch_is_not_called_a_preview_miss():
+    message = (
+        "[Parsed_guided_4] Width and height of input videos must be same. "
+        "Nothing was written into output file, because at least one of its streams received no packets."
+    )
+    advice = build_next_steps("error", {}, error=message)[0]
+    assert "preview time" not in advice["en"].lower()
+    assert "scaled" in advice["en"].lower() or "matte" in advice["en"].lower()
+    plain = build_next_steps("error", {}, error="Nothing was written into output file.")[0]
+    assert "preview time" not in plain["en"].lower()
+
+
+def test_fit_matte_scales_to_the_cut(tmp_path: Path):
+    cut = tmp_path / "cut.mp4"
+    matte = tmp_path / "matte.mp4"
+    _clip(cut, "0x224466", seconds=0.3, size="80x48")
+    _clip(matte, "white", seconds=0.3, size="32x32")
+    fit_matte(cut, matte, {"temporal_smooth": 0, "morph_close": 0, "feather": 0, "refine": False})
+    probed = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", str(matte)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert probed.stdout.strip() == "80,48"
+
+
+def test_reused_matte_is_printed(tmp_path: Path, capsys):
+    cut = tmp_path / "cut.mp4"
+    _clip(cut, "0x224466", seconds=0.2, size="64x64")
+    work = tmp_path / "work"
+    work.mkdir()
+    shutil.copyfile(cut, work / "matte.mp4")
+    shutil.copyfile(cut, work / "subject.mov")
+    state = {
+        "model": "u2net",
+        "engine": "birefnet",
+        "engine_explicit": False,
+        "engine_used": "u2net",
+        "threshold": None,
+        "infer_size": 320,
+        "temporal_smooth": 3,
+        "smooth_mode": "median",
+        "morph_close": 1,
+        "feather": 0,
+        "refine": False,
+    }
+    (work / "bg-matte-stamp.txt").write_text(_matte_key(cut, state) + "\n", encoding="utf-8")
+    (work / "bg-stamp.txt").write_text(_subject_key(cut, state) + "\n", encoding="utf-8")
+    ensure_subject(cut, work, state)
+    assert "bg: reused the existing matte" in capsys.readouterr().out
+    assert state["timings"]["reused"] is True
+
+
+def test_engine_selection_falls_back_and_mock_model_is_called(monkeypatch):
+    monkeypatch.setattr("lib.engine.birefnet_available", lambda: False)
+    monkeypatch.setattr("lib.engine.ben2_available", lambda: False)
+    used, note = select_engine("birefnet", explicit=False)
+    assert used == "u2net"
+    assert "u2net" in note
+    with pytest.raises(UGCError):
+        select_engine("birefnet", explicit=True)
+    monkeypatch.setattr("lib.engine.birefnet_available", lambda: True)
+    assert select_engine("birefnet", explicit=True) == ("birefnet", "")
+    seen = {}
+
+    def fake(frames, device):
+        seen["frames"] = len(frames)
+        return ["mask"]
+
+    monkeypatch.setattr("lib.engine._birefnet_masks", fake)
+    assert predict_masks(["frame"], "birefnet", "u2net", "cpu") == ["mask"]
+    assert seen["frames"] == 1

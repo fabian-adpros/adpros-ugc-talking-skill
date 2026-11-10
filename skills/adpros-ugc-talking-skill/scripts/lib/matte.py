@@ -30,17 +30,39 @@ def working_size(width: int, height: int, short: int) -> tuple[int, int]:
     return out_w, out_h
 
 
-def smooth_alpha(frames: list, window: int = 3, mode: str = "median") -> list:
-    """Temporal smooth. `frames[t][y][x]` is 0..255. `window` 0 or 1 is a copy."""
-    if not frames:
-        return []
+def smooth_alpha(frames, window: int = 3, mode: str = "median"):
+    """Temporal smooth. `frames[t][y][x]` is 0..255. `window` 0 or 1 is a copy.
+
+    An ndarray is checked before any truth test. NumPy raises on `if not array`.
+    """
+    from .util import UGCError
+
+    array = None
     try:
         import numpy as np
 
         if isinstance(frames, np.ndarray):
-            return _smooth_np(frames, window, mode)
+            array = frames
     except ImportError:
-        pass
+        np = None
+    try:
+        if array is not None:
+            if array.size == 0 or array.shape[0] == 0:
+                return array
+            return _smooth_np(array, window, mode)
+        if not frames:
+            return []
+        return _smooth_list(frames, window, mode)
+    except UGCError:
+        raise
+    except Exception as exc:
+        raise UGCError(
+            f"Matte smoothing failed ({exc}). Re-run with --bg-smooth 0 to skip it.",
+            f"Falló el suavizado del mate ({exc}). Vuelve a correr con --bg-smooth 0.",
+        ) from exc
+
+
+def _smooth_list(frames: list, window: int, mode: str) -> list:
     window = int(window or 0)
     if window <= 1 or len(frames) < 2:
         return [[row[:] for row in frame] for frame in frames]
@@ -150,5 +172,7 @@ def _smooth_np(frames, window: int, mode: str):
     for index in range(volume.shape[0]):
         start = max(0, index - radius)
         end = min(volume.shape[0], index + radius + 1)
-        out[index] = np.median(volume[start:end], axis=0)
+        # Same pick as the list path: sorted[len//2], not the average of an even window.
+        ordered = np.sort(volume[start:end], axis=0)
+        out[index] = ordered[(end - start) // 2]
     return out
