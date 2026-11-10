@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import shutil
 import subprocess
@@ -28,6 +30,37 @@ def _scale_clause(width: int, height: int) -> str:
     )
 
 
+def cut_inputs_key(
+    src: Path,
+    ranges: list[dict],
+    width: int,
+    height: int,
+    fps: int,
+    crf: int,
+    audio_bitrate: str,
+) -> str:
+    """Hash of the source bytes plus the encode settings. A matching cut can be reused."""
+    digest = hashlib.sha256()
+    with src.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    payload = {
+        "src_sha256": digest.hexdigest(),
+        "ranges": ranges,
+        "width": int(width),
+        "height": int(height),
+        "fps": int(fps),
+        "crf": int(crf),
+        "audio": str(audio_bitrate),
+    }
+    encoded = json.dumps(payload, sort_keys=True, default=str, ensure_ascii=False)
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def cut_stamp_path(dest: Path) -> Path:
+    return dest.with_name(dest.name + ".inputs")
+
+
 def cut_video(
     src: Path,
     dest: Path,
@@ -44,6 +77,10 @@ def cut_video(
             "El corte se quedó sin video. Afloja las muletillas o el umbral de silencio.",
         )
     dest.parent.mkdir(parents=True, exist_ok=True)
+    key = cut_inputs_key(src, ranges, width, height, fps, crf, audio_bitrate)
+    stamp = cut_stamp_path(dest)
+    if dest.exists() and dest.stat().st_size > 0 and stamp.exists() and stamp.read_text(encoding="utf-8").strip() == key:
+        return
     scale = _scale_clause(width, height)
     audio_format = audio_format_clause()
     parts: list[str] = []
@@ -99,6 +136,7 @@ def cut_video(
             str(dest),
         ]
     )
+    stamp.write_text(key + "\n", encoding="utf-8")
 
 
 def _wrap_hook(text: str, width_chars: int) -> str:

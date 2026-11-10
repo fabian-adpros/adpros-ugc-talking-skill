@@ -74,6 +74,32 @@ def cut_out_frames(source_duration: float, aligned: list[dict], fps: int) -> lis
     return [(start, end) for start, end in cuts if end > start]
 
 
+def _existing_vision(workdir: Path) -> list[dict]:
+    """Keep labels already stored on the storyboard when no new file is passed."""
+    path = workdir / "export" / "storyboard.json"
+    if not path.exists():
+        return []
+    try:
+        story = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return []
+    rows = []
+    for scene in story.get("scenes") or []:
+        label = scene.get("label")
+        confidence = scene.get("confidence")
+        if label not in VISION_LABELS or confidence not in VISION_CONFIDENCE:
+            continue
+        rows.append(
+            {
+                "index": int(scene.get("index") or 0),
+                "label": label,
+                "confidence": confidence,
+                "evidence": str(scene.get("evidence") or ""),
+            }
+        )
+    return rows
+
+
 def _load_vision(path: Path | None) -> list[dict]:
     if path is None:
         return []
@@ -609,7 +635,7 @@ def write_storyboard(
         raise UGCError("plan.json is missing. Run the plan step first.", "Falta plan.json. Corre primero el plan.")
     plan = json.loads(plan_path.read_text(encoding="utf-8"))
     preset = preset or load_preset(None)
-    vision = _load_vision(vision_path)
+    vision = _load_vision(vision_path) if vision_path is not None else _existing_vision(workdir)
     story = build_storyboard(plan, preset, vision)
     if plan.get("delivery"):
         story["delivery"] = plan["delivery"]

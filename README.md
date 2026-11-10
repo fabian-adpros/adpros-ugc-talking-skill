@@ -219,7 +219,7 @@ flowchart TD
 - El lugar de los subtítulos, el gancho en libass y el candado de sincronía se probaron con ffmpeg en Linux. No se volvieron a correr en macOS.
 - `captions.y_ratio` es fijo. En un reveal el subtítulo puede tapar el producto. No hay seguimiento del objeto.
 - El skill no traduce. Un clip en español sale en español.
-- Quitar el fondo es cuadro por cuadro: el borde puede parpadear. La velocidad en Apple Silicon no se probó (PyTorch MPS podría usarse; no se intentó). El maestro con alfa no lleva los subtítulos quemados; van en el MP4 y en el SRT.
+- Quitar el fondo puede parpadear en un producto en la mano. Por defecto U2-Net corre al lado corto 512 (no al cuadrado de 320 del CLI) y suaviza 3 cuadros. Si aún parpadea, el siguiente paso es Grounded-SAM-2. Apple Silicon no se probó. El maestro con alfa no lleva los subtítulos quemados; van en el MP4 y en el SRT.
 - Cada comando imprime `next_steps` en el idioma del clip (inglés o español) y lo guarda en `plan.json`.
 
 ### Roadmap (fase 2)
@@ -480,7 +480,7 @@ Run `./doctor.sh` first. A quiet first transcription is the model download. Exit
 - Caption placement, the libass hook, and the sync lock were checked with ffmpeg on Linux. They were not run again on macOS.
 - `captions.y_ratio` is a fixed line. During a product reveal the captions can cover the product. There is no object tracking.
 - The skill does not translate. A Spanish clip stays in Spanish.
-- Background removal is frame by frame, so the edge can flicker. Apple Silicon speed was not tested (PyTorch MPS might be used; it was not tried). The alpha master does not have burned-in captions; those are on the MP4 and in the SRT.
+- Background removal can still flicker on a product in the hand. The default runs U2-Net at a short side of 512 (not the CLI's 320 square) and smooths 3 frames. If it still flickers, Grounded-SAM-2 is the next step. Apple Silicon was not tested. The alpha master does not have burned-in captions; those are on the MP4 and in the SRT.
 - Every command prints `next_steps` in the clip language (English or Spanish) and stores the list on `plan.json`.
 
 ### Roadmap (phase 2)

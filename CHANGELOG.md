@@ -4,7 +4,10 @@
 
 - Optional background replacement with `backgroundremover` and U2-Net. The default model is `u2net`, not the person-only net, so a product in the hand is less likely to disappear. `--bg`, `--bg transparent`, and `--bg-threshold` run after the cuts and before captions. Exit 13 shows side-by-side preview frames. `./install.sh --with-bg` installs it. `export --nle` also copies the alpha, the matte, and the plate.
 - Every stage prints a `next_steps` list in the clip's language and stores it on `plan.json`.
-- Frame-by-frame removal can flicker. Apple Silicon speed was not tested. Grounded-SAM-2 is a later phase.
+- Frame-by-frame removal can flicker. Apple Silicon speed was not tested. Grounded-SAM-2 is the next step if a hand-held product still drops out.
+- Preview times stop two frames before the end, JPEG previews are full-range, and one missed frame does not abort the preview. ffmpeg failures stay short and point at `ugc-ffmpeg.log`.
+- A storyboard rewrite keeps existing vision labels. An unchanged cut is not encoded again, so approving the background does not rerun U2-Net.
+- When the Python package imports, U2-Net runs at `bg.infer_size` (default 512, aspect kept) instead of backgroundremover's 320-square path, then a temporal median, a close, and a guided feather. Timings are printed.
 
 ## 0.2.2
 

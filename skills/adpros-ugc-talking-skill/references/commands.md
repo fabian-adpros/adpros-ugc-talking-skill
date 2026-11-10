@@ -52,6 +52,10 @@ backgroundremover -i CUT.mp4 -o MATTE.mp4 -m u2net -mk
 
 The composite after that matte is ffmpeg, and that path was run here on ffmpeg 6.1.1: scale/crop the plate to the export size, `-stream_loop -1` for a video plate, `overlay` the alpha subject. `subject_from_matte` requests `prores_ks` profile 4 and `yuva444p10le`. On this ffmpeg the written file was ProRes 4444 with `yuva444p12le`. Libass captions are burned on the composited MP4 after that, not on the alpha master.
 
+Preview JPEGs append `format=yuvj420p` and `-strict unofficial`. ffmpeg 7.1 rejects TV-range YUV in mjpeg unless that is set. That ffmpeg 7.1 case was reported from a real run and was not re-executed on the ffmpeg 6.1.1 used for these tests.
+
+`backgroundremover` `Net.forward` interpolates to 320×320, `iter_frames` resizes to height 320, and `RescaleT` also squares to 320. None of those take a size argument. The sized pass is this skill's Python call when the package imports. It was not timed here because torch and the weights are not installed in this environment. A real 11s clip on CPU torch 2.15 was reported at about 72s for the CLI path.
+
 ## faster-whisper 1.2.1
 
 Library, not a CLI. See [transcription.md](transcription.md).

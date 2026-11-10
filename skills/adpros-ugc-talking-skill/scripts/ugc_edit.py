@@ -640,6 +640,9 @@ def build_parser() -> argparse.ArgumentParser:
             bg_threshold=None,
             bg_yes=False,
             bg_skip=False,
+            bg_infer_size=None,
+            bg_smooth=None,
+            bg_feather=None,
         )
     storyboard = sub.add_parser("storyboard")
     storyboard.add_argument("--workdir", required=True)
@@ -659,6 +662,9 @@ def _add_bg_flags(target: argparse.ArgumentParser) -> None:
     target.add_argument("--bg-threshold", type=int, default=None, help="Matte luma cutoff, 0-255.")
     target.add_argument("--bg-yes", action="store_true", help="Approve the background preview.")
     target.add_argument("--bg-skip", action="store_true", help="Keep the original background.")
+    target.add_argument("--bg-infer-size", type=int, default=None, help="U2-Net short side. Default 512.")
+    target.add_argument("--bg-smooth", type=int, default=None, help="Temporal median window, 0–5. Default 3.")
+    target.add_argument("--bg-feather", type=int, default=None, help="Guided-feather radius, 0–8. Default 1.")
 
 
 def _inline_flag(args: argparse.Namespace) -> bool | None:

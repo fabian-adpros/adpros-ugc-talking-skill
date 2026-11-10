@@ -52,6 +52,11 @@ DEFAULTS: dict = {
         "file": None,
         "model": "u2net",
         "threshold": None,
+        "infer_size": 512,
+        "temporal_smooth": 3,
+        "smooth_mode": "median",
+        "morph_close": 1,
+        "feather": 1,
     },
     "transcription": {
         "engine": "auto",

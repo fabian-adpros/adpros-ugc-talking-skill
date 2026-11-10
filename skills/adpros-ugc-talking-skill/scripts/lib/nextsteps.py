@@ -11,9 +11,29 @@ import json
 STAGES = ("hook", "delivery", "storyboard", "bg", "render", "final", "error", "transcribe")
 
 
+def _short(text: str, limit: int = 160) -> str:
+    flat = " ".join((text or "").split())
+    if len(flat) <= limit:
+        return flat
+    return flat[: limit - 1] + "…"
+
+
 def _error_advice(error: str | None) -> tuple[str, str, str | None]:
-    text = (error or "See the message above.").strip()
+    text = error or ""
     low = text.lower()
+    brief = _short(text)
+    if "non full-range yuv" in low or "strict_std_compliance" in low or "yuvj420p" in low:
+        return (
+            "The preview JPEG was rejected as TV-range YUV. Re-run the same command; JPEGs are written full-range now.",
+            "El JPEG de la vista previa fue rechazado por el rango YUV. Vuelve a correr el mismo comando.",
+            "run --from render",
+        )
+    if "no preview frame" in low or "nothing was written" in low:
+        return (
+            "A preview time was past the last frame. Re-run; times now stop two frames before the end.",
+            "Un tiempo de la vista previa quedó después del último cuadro. Vuelve a correr.",
+            "run --from render",
+        )
     if "backgroundremover" in low or "--with-bg" in low:
         return (
             "Install the optional background tool, then re-run the same command: ./install.sh --with-bg",
@@ -32,13 +52,29 @@ def _error_advice(error: str | None) -> tuple[str, str, str | None]:
             "Renderiza antes de exportar: run CLIP --workdir DIR --from render --renderer ffmpeg",
             "run CLIP --workdir DIR --from render --renderer ffmpeg",
         )
-    if "not found" in low or "no está" in low:
+    if "decoder" in low or "hevc" in low or "h265" in low:
         return (
-            f"Check the path, then run the same command again. {text}",
-            f"Revisa la ruta y vuelve a correr el mismo comando. {text}",
+            "This ffmpeg could not decode the clip. Make an H.264 copy and run that file.",
+            "Este ffmpeg no decodificó el clip. Haz una copia H.264 y corre ese archivo.",
+            "ffmpeg -i CLIP -c:v libx264 -c:a aac copy.mp4",
+        )
+    if "ugc-ffmpeg.log" in low or "bg-infer.log" in low:
+        return (
+            f"Open the log named above, fix that line, and re-run the same command. {brief}",
+            f"Abre el log de arriba, corrige esa línea y vuelve a correr el mismo comando. {brief}",
             None,
         )
-    return (f"Fix: {text}", f"Arreglo: {text}", "doctor")
+    if "not found" in low or "no está" in low:
+        return (
+            f"Check the path, then run the same command again. {brief}",
+            f"Revisa la ruta y vuelve a correr el mismo comando. {brief}",
+            None,
+        )
+    return (
+        f"Read the short message above, fix that cause, and run the same command again. {brief}",
+        f"Lee el mensaje corto de arriba, corrige esa causa y vuelve a correr el mismo comando. {brief}",
+        None,
+    )
 
 
 def build_next_steps(stage: str, plan: dict | None = None, error: str | None = None) -> list[dict]:
@@ -92,9 +128,24 @@ def build_next_steps(stage: str, plan: dict | None = None, error: str | None = N
         ]
     elif stage == "error":
         en, es, command = _error_advice(error)
+        low = (error or "").lower()
+        if "ugc-ffmpeg.log" in low or "non full-range" in low or "no preview frame" in low:
+            second = (
+                "open_log",
+                "Open ugc-ffmpeg.log next to the output and read the last lines",
+                "Abre ugc-ffmpeg.log junto a la salida y lee las últimas líneas",
+                None,
+            )
+        else:
+            second = (
+                "doctor",
+                "Run doctor and fix the first missing tool",
+                "Corre doctor y arregla la primera herramienta que falte",
+                "doctor",
+            )
         items = [
             ("fix", en, es, command),
-            ("doctor", "Run doctor and fix the first missing tool", "Corre doctor y arregla la primera herramienta que falte", "doctor"),
+            second,
             ("retry", "Run the same command again after the fix", "Vuelve a correr el mismo comando después del arreglo", "run"),
         ]
     else:

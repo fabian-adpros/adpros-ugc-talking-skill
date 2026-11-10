@@ -183,6 +183,12 @@ def test_low_confidence_product_reveal_is_not_a_marker(tmp_path: Path):
     markers = [slot for slot in story["broll_slots"] if slot["label"] == "product_reveal"]
     assert [slot["index"] for slot in markers] == [2]
     assert story["scenes"][0]["confidence"] == "low"
+    again = write_storyboard(work, preset, None)
+    kept = {scene["index"]: scene["label"] for scene in again["scenes"]}
+    assert kept[1] == "product_reveal"
+    assert kept[2] == "product_reveal"
+    assert again["scenes"][0]["confidence"] == "low"
+    assert again["scenes"][1]["evidence"].startswith("The bottle")
 
 
 def test_cut_out_is_the_inverse_of_kept_ranges():

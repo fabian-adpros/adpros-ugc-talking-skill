@@ -8,6 +8,7 @@ import json
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -21,10 +22,14 @@ from lib.bg import (  # noqa: E402
     preview_times,
     product_times,
     resolve_bg,
+    side_by_side_frames,
     subject_from_matte,
     write_matte,
 )
 from lib.config import DEFAULTS  # noqa: E402
+from lib.matte import morph_close, smooth_alpha, working_size  # noqa: E402
+from lib.media import run_cmd  # noqa: E402
+from lib.render import cut_video  # noqa: E402
 from lib.nextsteps import STAGES, build_next_steps, print_next_steps  # noqa: E402
 from lib.util import UGCError  # noqa: E402
 
@@ -389,3 +394,74 @@ def test_render_stops_at_exit_13_and_styles_the_composite(tmp_path: Path, monkey
     approved = json.loads((work / "plan.json").read_text(encoding="utf-8"))
     assert approved["bg"]["approved"] is True
     assert approved["next_steps"][0]["id"] == "export"
+    assert approved["bg"].get("timings", {}).get("reused") is True
+
+
+def test_preview_times_stop_before_the_last_frame():
+    times = preview_times(11.033, [5.133, 10.567], fps=30)
+    limit = 11.033 - 2 / 30
+    assert times == sorted(set(times))
+    assert 3 <= len(times) <= 5
+    assert max(times) <= limit + 1e-9
+    assert 10.993 not in times
+    assert 5.133 in times
+
+
+def test_a_missed_preview_frame_does_not_abort(tmp_path: Path):
+    clip = tmp_path / "clip.mp4"
+    _clip(clip, "0x224466", seconds=0.4)
+    written = side_by_side_frames(clip, clip, [0.05, 9.0], tmp_path / "preview")
+    assert len(written) == 1
+    assert Path(written[0]).stat().st_size > 100
+
+
+def test_ffmpeg_errors_stay_short_and_name_the_log(tmp_path: Path):
+    with pytest.raises(UGCError) as caught:
+        run_cmd(["ffmpeg", "-y", "-i", str(tmp_path / "missing.mp4"), str(tmp_path / "out.mp4")])
+    assert len(caught.value.en) < 500
+    assert "ugc-ffmpeg.log" in caught.value.en
+    assert (tmp_path / "ugc-ffmpeg.log").exists()
+    assert len((tmp_path / "ugc-ffmpeg.log").read_text(encoding="utf-8")) > len(caught.value.en)
+    huge = "ffmpeg failed\n" + ("frame 0\n" * 400)
+    advice = build_next_steps("error", {}, error=huge)[0]
+    assert len(advice["en"]) < 400
+    assert "doctor" not in (advice["command"] or "")
+    yuv = build_next_steps("error", {}, error="Non full-range YUV is non-standard, set strict_std_compliance")[0]
+    assert "full-range" in yuv["en"]
+    logged = build_next_steps("error", {}, error=caught.value.en)
+    assert logged[1]["id"] == "open_log"
+    assert "doctor" not in (logged[0]["en"] + (logged[0]["command"] or ""))
+
+
+def test_cut_video_reuses_an_unchanged_encode(tmp_path: Path):
+    source = tmp_path / "clip.mp4"
+    _clip(source, "0x224466")
+    dest = tmp_path / "cut.mp4"
+    ranges = [{"src_start": 0.0, "src_end": 1.0}]
+    cut_video(source, dest, ranges, 160, 90, 30, 30, "64k")
+    first = dest.stat().st_mtime_ns
+    cut_video(source, dest, ranges, 160, 90, 30, 30, "64k")
+    assert dest.stat().st_mtime_ns == first
+    cut_video(source, dest, ranges, 160, 90, 30, 28, "64k")
+    assert dest.stat().st_mtime_ns != first
+
+
+def test_smooth_alpha_fills_a_one_frame_hole():
+    flicker = [[[255]], [[0]], [[255]]]
+    started = time.perf_counter()
+    filled = smooth_alpha(flicker, window=3, mode="median")
+    elapsed = time.perf_counter() - started
+    assert [frame[0][0] for frame in filled] == [255, 255, 255]
+    assert elapsed < 0.5
+    hole = [
+        [255, 255, 255],
+        [255, 0, 255],
+        [255, 255, 255],
+    ]
+    closed = morph_close(hole, radius=1)
+    assert closed[1][1] == 255
+    width, height = working_size(1080, 1920, 512)
+    assert width == 512
+    assert height % 32 == 0 and width % 32 == 0
+    assert height > width
+    assert abs((height / width) - (1920 / 1080)) < 0.05
