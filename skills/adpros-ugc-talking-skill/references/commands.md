@@ -37,6 +37,21 @@ auto-editor 29.3.1 `--help` (this repo pins `>=29,<30`) accepts `--edit none`, `
 
 `npx remotion render --help` lists `--props`, `--codec`, `--pixel-format`, `--crf`, `--concurrency`, `--disallow-parallel-encoding`, `--log`. Chrome for the render is installed with `npx remotion browser ensure`.
 
+## backgroundremover
+
+Flags below were read from the upstream CLI source (`backgroundremover/cmd/cli.py` on nadermx/backgroundremover). This environment did not install the package, so they were not confirmed with a local `--help`, and the u2net weights were not downloaded.
+
+```bash
+backgroundremover -i CUT.mp4 -o MATTE.mp4 -m u2net -mk
+```
+
+- `-m` / `--model` choices: `u2net` (default here), `u2net_human_seg`, `u2netp`
+- `-mk` / `--mattekey` writes the mask. `-tv` / `--transparentvideo` writes a transparent mov (ProRes 4444 by default in that tool)
+- `-mt` / `--mask-threshold` exists, and the video functions do not receive it. This skill thresholds the matte with ffmpeg instead (`--bg-threshold`)
+- `-ab` is the alpha-matting background threshold and only applies with `-a`. It is not the mask cutoff
+
+The composite after that matte is ffmpeg, and that path was run here on ffmpeg 6.1.1: scale/crop the plate to the export size, `-stream_loop -1` for a video plate, `overlay` the alpha subject. `subject_from_matte` requests `prores_ks` profile 4 and `yuva444p10le`. On this ffmpeg the written file was ProRes 4444 with `yuva444p12le`. Libass captions are burned on the composited MP4 after that, not on the alpha master.
+
 ## faster-whisper 1.2.1
 
 Library, not a CLI. See [transcription.md](transcription.md).

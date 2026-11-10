@@ -61,13 +61,20 @@ if [[ "${INSTALL_WHISPERX:-0}" == "1" ]]; then
 fi
 
 WITH_OTIO=0
+WITH_BG=0
 for arg in "$@"; do
   if [[ "$arg" == "--with-otio" ]]; then
     WITH_OTIO=1
   fi
+  if [[ "$arg" == "--with-bg" ]]; then
+    WITH_BG=1
+  fi
 done
 if [[ "${INSTALL_OTIO:-0}" == "1" ]]; then
   WITH_OTIO=1
+fi
+if [[ "${INSTALL_BG:-0}" == "1" ]]; then
+  WITH_BG=1
 fi
 if [[ "$WITH_OTIO" == "1" ]]; then
   log "Optional OpenTimelineIO adapters"
@@ -77,6 +84,15 @@ if [[ "$WITH_OTIO" == "1" ]]; then
     'otio-fcp-adapter' \
     'otio-fcpx-xml-adapter' \
     || echo "OpenTimelineIO extras did not fully install. Premiere and FCPXML via auto-editor still work."
+fi
+
+if [[ "$WITH_BG" == "1" ]]; then
+  log "Optional background removal (CPU PyTorch + backgroundremover)"
+  "$SKILL_DIR/.venv/bin/pip" install torch torchvision --index-url https://download.pytorch.org/whl/cpu \
+    && "$SKILL_DIR/.venv/bin/pip" install backgroundremover \
+    || echo "backgroundremover did not install. The rest of the pipeline still works. Re-run ./install.sh --with-bg."
+  echo "The first backgroundremover run downloads the u2net weights (about 176 MB) into ~/.u2net."
+  echo "Apple Silicon speed was not tested. PyTorch may use MPS there; this install path is the CPU wheel."
 fi
 
 log "Remotion template"
@@ -102,6 +118,8 @@ Activate the venv when you call the pipeline yourself:
 
 WhisperX is optional. Install it with INSTALL_WHISPERX=1 ./install.sh
 OpenTimelineIO is optional. Install it with ./install.sh --with-otio
+Background removal is optional. Install it with ./install.sh --with-bg
+That pulls CPU torch and backgroundremover. The first run downloads u2net (about 176 MB) into ~/.u2net.
 The OpenTimelineIO-Plugins meta-package does not include otio-fcpx-xml-adapter, so --with-otio installs that adapter by name.
 ffmpeg is the caption fallback when Node or Remotion is missing.
 auto-editor is the silence engine when it is installed; word gaps are the fallback.

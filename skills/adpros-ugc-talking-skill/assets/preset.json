@@ -59,6 +59,13 @@
     "editors": ["premiere", "fcpx", "resolve"],
     "review_storyboard": false
   },
+  "bg": {
+    "enabled": false,
+    "mode": "keep",
+    "file": null,
+    "model": "u2net",
+    "threshold": null
+  },
   "transcription": {
     "engine": "auto",
     "model": null,

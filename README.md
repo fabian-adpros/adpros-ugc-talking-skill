@@ -51,6 +51,12 @@ WhisperX, si lo quieres:
 INSTALL_WHISPERX=1 ./install.sh
 ```
 
+Fondo opcional (quita el fondo y pone una imagen, un video, o un ProRes 4444 con alfa). Instala torch para CPU y `backgroundremover`. La primera vez baja los pesos `u2net` (unos 176 MB) a `~/.u2net`. El modelo por defecto es `u2net`, el de saliencia general, porque `u2net_human_seg` suele borrar el producto que la persona tiene en la mano. Va después de los cortes y antes de los subtítulos. La salida 13 muestra 3–5 cuadros lado a lado y espera. `--yes` no pregunta y deja el fondo original, salvo que el preset lo encienda.
+
+```bash
+./install.sh --with-bg
+```
+
 ### Instalar el skill
 
 **Claude Code, para ti**
@@ -183,9 +189,12 @@ flowchart TD
   J --> K{¿Confirmas el gancho?}
   K -->|no| J
   K -->|sí| L[Corte ffmpeg]
-  L --> M{Remotion?}
+  L --> L2{¿Fondo nuevo?}
+  L2 -->|sí| L3[Mate u2net y composite]
+  L2 -->|no| M{Remotion?}
+  L3 --> M
   M -->|sí| N[Composición TalkingHead]
-  M -->|no| O[ASS + drawtext + volume -18 dB]
+  M -->|no| O[ASS libass + música −18 dB]
   N --> P[loudnorm -14 LUFS y tope 60 s]
   O --> P
   P --> Q[final.mp4]
@@ -210,6 +219,8 @@ flowchart TD
 - El lugar de los subtítulos, el gancho en libass y el candado de sincronía se probaron con ffmpeg en Linux. No se volvieron a correr en macOS.
 - `captions.y_ratio` es fijo. En un reveal el subtítulo puede tapar el producto. No hay seguimiento del objeto.
 - El skill no traduce. Un clip en español sale en español.
+- Quitar el fondo es cuadro por cuadro: el borde puede parpadear. La velocidad en Apple Silicon no se probó (PyTorch MPS podría usarse; no se intentó). El maestro con alfa no lleva los subtítulos quemados; van en el MP4 y en el SRT.
+- Cada comando imprime `next_steps` en el idioma del clip (inglés o español) y lo guarda en `plan.json`.
 
 ### Roadmap (fase 2)
 
@@ -218,6 +229,7 @@ flowchart TD
 - HeyGen cuando el clip de entrada sea un avatar y no una toma real
 - Variantes y ganchos A/B a partir del mismo transcript
 - Windows, con rutas y un instalador que no dependa de Homebrew
+- Grounded-SAM-2 para seguir a la persona y al producto con un prompt, en vez del recorte cuadro a cuadro de U2-Net
 
 ### Créditos y licencias
 
@@ -232,6 +244,8 @@ Este repositorio es MIT. Copyright 2026 Fabián. Ver `LICENSE`.
 | [auto-editor](https://github.com/WyattBlue/auto-editor) | Unlicense | El código del repo. Los binarios de las releases pueden arrastrar otras licencias |
 | [FFmpeg](https://ffmpeg.org) | GPL o LGPL según el build | No se incluye. Hace falta el del sistema. Un build con libx264 suele ser GPL |
 | [Remotion](https://www.remotion.dev/docs/license) | Licencia Remotion, no es OSI | Gratis para una persona o una empresa de hasta 3 personas, también en uso comercial. Empresas más grandes necesitan Company License |
+| [backgroundremover](https://github.com/nadermx/backgroundremover) | MIT | Opcional. Quitar fondo. `./install.sh --with-bg` |
+| Pesos U2-Net | Apache-2.0 | Se bajan a `~/.u2net` la primera vez. No van en el repo |
 | [Inter](https://github.com/rsms/inter) | SIL OFL 1.1 | `assets/fonts/`, ver `OFL.txt` |
 | React | MIT | Dependencia de la plantilla |
 
@@ -296,6 +310,12 @@ Optional WhisperX:
 
 ```bash
 INSTALL_WHISPERX=1 ./install.sh
+```
+
+Optional background removal (an image, a video, or a ProRes 4444 alpha master). This installs the CPU torch wheel and `backgroundremover`. The first run downloads the `u2net` weights (about 176 MB) into `~/.u2net`. The default model is `u2net`, general saliency, because `u2net_human_seg` often erases a product held in the hand. It runs after the cuts and before captions. Exit 13 shows 3–5 side-by-side frames and waits. `--yes` skips the question and keeps the original background unless the preset turns it on.
+
+```bash
+./install.sh --with-bg
 ```
 
 ### Install the skill
@@ -430,9 +450,12 @@ flowchart TD
   J --> K{Confirm the hook?}
   K -->|no| J
   K -->|yes| L[ffmpeg cut]
-  L --> M{Remotion?}
+  L --> L2{New background?}
+  L2 -->|yes| L3[u2net matte and composite]
+  L2 -->|no| M{Remotion?}
+  L3 --> M
   M -->|yes| N[TalkingHead composition]
-  M -->|no| O[ASS + drawtext + volume -18 dB]
+  M -->|no| O[libass captions + music −18 dB]
   N --> P[loudnorm -14 LUFS and 60 s cap]
   O --> P
   P --> Q[final.mp4]
@@ -457,6 +480,8 @@ Run `./doctor.sh` first. A quiet first transcription is the model download. Exit
 - Caption placement, the libass hook, and the sync lock were checked with ffmpeg on Linux. They were not run again on macOS.
 - `captions.y_ratio` is a fixed line. During a product reveal the captions can cover the product. There is no object tracking.
 - The skill does not translate. A Spanish clip stays in Spanish.
+- Background removal is frame by frame, so the edge can flicker. Apple Silicon speed was not tested (PyTorch MPS might be used; it was not tried). The alpha master does not have burned-in captions; those are on the MP4 and in the SRT.
+- Every command prints `next_steps` in the clip language (English or Spanish) and stores the list on `plan.json`.
 
 ### Roadmap (phase 2)
 
@@ -465,6 +490,7 @@ Run `./doctor.sh` first. A quiet first transcription is the model download. Exit
 - HeyGen when the source is an avatar rather than a real take
 - Variants and A/B hooks from the same transcript
 - Windows, with paths and an installer that does not assume Homebrew
+- Grounded-SAM-2 for prompted person-plus-product tracking, instead of U2-Net's frame-by-frame cutout
 
 ### Credits and licenses
 
@@ -479,6 +505,8 @@ This repo is MIT. Copyright 2026 Fabián. See `LICENSE`.
 | [auto-editor](https://github.com/WyattBlue/auto-editor) | Unlicense | The repo. Release binaries can pull in other licenses |
 | [FFmpeg](https://ffmpeg.org) | GPL or LGPL depending on the build | Not vendored. A build with libx264 is usually GPL |
 | [Remotion](https://www.remotion.dev/docs/license) | Remotion License, not OSI open source | Free for an individual or a company of up to 3 people, including commercial use. Larger companies need a Company License |
+| [backgroundremover](https://github.com/nadermx/backgroundremover) | MIT | Optional background removal. `./install.sh --with-bg` |
+| U2-Net weights | Apache-2.0 | Downloaded into `~/.u2net` on first use. Not committed |
 | [Inter](https://github.com/rsms/inter) | SIL OFL 1.1 | `assets/fonts/`, see `OFL.txt` |
 | React | MIT | Template dependency |
 

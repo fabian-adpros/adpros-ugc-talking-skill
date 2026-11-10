@@ -11,6 +11,7 @@ import subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+from .bg import export_bg_layers
 from .config import default_music_path, load_preset
 from .media import auto_editor_available, probe, run_cmd
 from .storyboard import cut_out_frames, write_storyboard
@@ -462,5 +463,15 @@ def export_nle(workdir: Path, which: str, preset: dict | None = None) -> dict:
         for name in ("media/source.mp4", "captions.srt", "hook.srt"):
             if name not in written:
                 written.append(name)
+    plan_path = workdir / "plan.json"
+    if plan_path.exists():
+        for name in export_bg_layers(workdir, media, load_json(plan_path)):
+            if name not in written:
+                written.append(name)
+        if any(name.startswith("media/subject") or name.startswith("media/matte") or name.startswith("media/background") for name in written):
+            notes.append(
+                "Background layers are separate files: media/subject.mov (ProRes 4444 alpha, no captions), "
+                "media/matte.mp4, and media/background.* when the mode is replace. They are not inside the auto-editor sequence."
+            )
     dump_json(export / "nle.json", {"written": written, "notes": notes, "cut_out_frames": cuts, "fcpxml": fcpxml_version})
     return {"written": written, "notes": notes, "cut_out": cuts}

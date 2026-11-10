@@ -46,6 +46,13 @@ DEFAULTS: dict = {
         "editors": ["premiere", "fcpx", "resolve"],
         "review_storyboard": False,
     },
+    "bg": {
+        "enabled": False,
+        "mode": "keep",
+        "file": None,
+        "model": "u2net",
+        "threshold": None,
+    },
     "transcription": {
         "engine": "auto",
         "model": None,

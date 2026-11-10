@@ -36,6 +36,8 @@ Produced before the render. This is the approval payload.
 - `hook`: `{text, start, end, alternates, reason}`
 - `trim`: `{max_duration, will_trim}`
 - `warnings[]`
+- `bg`: `{enabled, mode, file, model, threshold, approved, previews[]}`. `mode` is `keep`, `replace`, or `transparent`. `model` defaults to `u2net`.
+- `next_steps[]`: `{n, id, en, es, command}` for the latest stage. Both languages are stored. The command prints the one that matches the clip.
 
 ## props.json
 

@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires ffmpeg (libass, libx264, aac, loudnorm), Python 3.10+, and faster-whisper or WhisperX. auto-editor is the preferred silence engine. Node.js and Remotion are optional; FFmpeg renders if they are missing. CPU or CUDA. English and Spanish. No hosted API.
 metadata:
   author: Fabian
-  version: "0.2.2"
+  version: "0.3.0"
   languages: "en,es"
 ---
 
@@ -86,7 +86,22 @@ Then re-run with their choices:
 
 6. Exit 12 means the storyboard is ready for review. Show `export/storyboard.html` and `export/contact-sheet.jpg`. Wait for approval. Then continue with `--storyboard-yes`. Do not export the NLE files before that.
 
-7. After they say yes (or they already said "sin preguntar" / "just export it"), render and export:
+7. Background removal is off unless the user asks or `bg.enabled` is true in the preset. It runs after the cuts, on the kept picture, and before captions, the hook, and music. Captions are burned onto the composited picture, so the matte cannot erase them.
+
+```bash
+"$PY" "$SKILL_DIR/scripts/ugc_edit.py" run "$CLIP" \
+  --workdir "$WORKDIR" --from render --bg /path/to/plate.png --ui es
+```
+
+`--bg transparent` writes a ProRes 4444 alpha `subject.mov` and styles the MP4 over black. `--bg-model` defaults to `u2net` (general saliency). Do not switch to `u2net_human_seg` unless the user asks: that model is person-only and often deletes a product in the hand. `./install.sh --with-bg` installs CPU torch and `backgroundremover`. The first run downloads the u2net weights (about 176 MB) into `~/.u2net`. If the tool is missing, the command exits 2 and names that install. `doctor` reports it as optional.
+
+Exit 13 is the background checkpoint, not a failure. The command writes 3–5 side-by-side frames (`bg-preview/compare_NN.jpg`): original on the left, matted result on the right, including frames where a product is visible when the storyboard already labeled one. Open those JPEGs and compare them. Say explicitly if a hand-held product or the hands were cut out or flicker. Then offer a numbered choice: keep this background (`--bg-yes`), try `u2net_human_seg` or `u2netp`, change `--bg-threshold` (0–255, applied on the matte), or `--bg-skip` to keep the original. `--yes` skips the checkpoint and uses the preset, which keeps the original background unless `bg.enabled` is true.
+
+Removal is frame by frame, so the edge can flicker. Apple Silicon speed was not tested (PyTorch MPS might be used; it was not tried). Grounded-SAM-2, for a prompted person-plus-product track, is a later phase and is not in this version. The alpha master does not have captions burned in. Captions are on the MP4 and in the SRT files.
+
+When `export --nle` runs and a background was approved, `export/media/` also gets `subject.mov`, `matte.mp4`, and the background file. They sit beside `media/source.mp4`. They are not inside the auto-editor sequence. `RELINK.md` says so.
+
+8. After they say yes (or they already said "sin preguntar" / "just export it"), render and export. If exit 13 is still open, answer the background preview first.
 
 ```bash
 "$PY" "$SKILL_DIR/scripts/ugc_edit.py" run "$CLIP" \
@@ -95,8 +110,8 @@ Then re-run with their choices:
 
 Omit `--hook` to keep the suggested line. `--renderer ffmpeg` forces the fallback. The default tries Remotion, then FFmpeg.
 
-8. Report `final.mp4`: resolution, duration, LUFS, and the frame PNG. Repeat every warning from `plan.json`, especially fillers the transcript never contained.
-9. If they asked for editor files, `export/` is part of the delivery, next to `final.mp4`. `run` writes only the chosen targets after the loudness export. You can also call export directly:
+9. Report `final.mp4`: resolution, duration, LUFS, and the frame PNG. Repeat every warning from `plan.json`, especially fillers the transcript never contained.
+10. If they asked for editor files, `export/` is part of the delivery, next to `final.mp4`. `run` writes only the chosen targets after the loudness export. You can also call export directly:
 
 ```bash
 "$PY" "$SKILL_DIR/scripts/ugc_edit.py" export --workdir "$WORKDIR" --nle all
@@ -104,7 +119,13 @@ Omit `--hook` to keep the suggested line. `--renderer ffmpeg` forces the fallbac
 
 `--nle` is a comma-separated list, `all`, or `none`. `premiere` is `project_premiere.xml` (FCP 7 xmeml, not FCPXML). `fcpx` and `resolve` share `project.fcpxml` (FCPXML 1.10; the asset duration is the full conformed source). `capcut` copies media and SRT only. `otio` and `edl` need `./install.sh --with-otio` (`opentimelineio>=0.17,<0.19`, so Python 3.13 can use the 0.18 wheel). Read `export/RELINK.md` before telling the user which file to open.
 
-Exit 10 is the hook. Exit 11 is the delivery questionnaire. Exit 12 is the storyboard review. None of them is a crash.
+Exit 10 is the hook. Exit 11 is the delivery questionnaire. Exit 12 is the storyboard review. Exit 13 is the background preview. None of them is a crash.
+
+## What's next
+
+Close every stage and every checkpoint with a short "What's next" / "Qué sigue" block. Use the `next_steps` list the command just printed. The same list is stored on `plan.json`. Show 2–4 of those options as a numbered list the user can answer with a number. Do this in Claude.ai and in Claude Code. Match the user's language.
+
+The checkpoints are the hook (exit 10), the delivery questionnaire (exit 11), the storyboard review (exit 12), the background preview (exit 13), the styled render, the final export, and any exit 2 error. After a final render the list can include changing the hook, trying another background, exporting for Premiere, Final Cut, and Resolve, making a 1:1 or 4:5 version, moving captions when they cover the product, and making another video with the same preset. After an error, the first item is the likely fix and the exact next command. Do not invent a different command when `next_steps` already names one.
 
 Details live in the reference files. Open only the one you need.
 
@@ -144,8 +165,11 @@ Preset file: `assets/preset.json`. Filler lists: `assets/fillers.json`.
 
 ## Errors
 
-- Exit 2: read the message, fix that cause, do not invent a parallel edit. See [references/troubleshooting.md](references/troubleshooting.md).
+- Exit 2: read the message, then the printed `next_steps`. The first item is the likely fix and the command to run. See [references/troubleshooting.md](references/troubleshooting.md).
 - Exit 10: waiting for the hook. Not a failure.
+- Exit 11: waiting for the delivery answers. Not a failure.
+- Exit 12: waiting for the storyboard review. Not a failure.
+- Exit 13: waiting for the background preview. Compare the frames before you approve. Not a failure.
 - If Remotion fails and the user did not force it, the script falls back to FFmpeg and says so. If they forced `--renderer remotion`, show the error.
 - If the transcript has no fillers, say that Whisper dropped them. Do not claim they were removed.
 
