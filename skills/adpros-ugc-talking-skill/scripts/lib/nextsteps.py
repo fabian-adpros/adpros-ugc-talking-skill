@@ -95,6 +95,35 @@ def _error_advice(error: str | None) -> tuple[str, str, str | None]:
     )
 
 
+def _bg_steps(plan: dict | None) -> list[tuple]:
+    engine = ((plan or {}).get("bg") or {}).get("engine_used") or ((plan or {}).get("bg") or {}).get("engine") or "birefnet"
+    if engine == "u2net":
+        switch = (
+            "try_birefnet",
+            "Switch to BiRefNet (keeps dark clothes and products; slower, about 1 s/frame on CPU)",
+            "Pasa a BiRefNet (conserva ropa y productos oscuros; más lento, cerca de 1 s/cuadro en CPU)",
+            "--bg-engine birefnet --bg-yes",
+        )
+    else:
+        switch = (
+            "faster_u2net",
+            "Switch to U2-Net, the faster fallback (about 72s for an 11s clip on CPU)",
+            "Pasa a U2-Net, el atajo más rápido (unos 72 s para un clip de 11 s en CPU)",
+            "--bg-engine u2net --bg-yes",
+        )
+    return [
+        ("keep_bg", "Keep this background", "Quédate con este fondo", "--bg-yes"),
+        switch,
+        (
+            "tune_bg",
+            "Try BEN2, a larger short side, or a longer smooth window",
+            "Prueba BEN2, un lado corto mayor, o más suavizado",
+            "--bg-engine ben2 --bg-yes",
+        ),
+        ("skip_bg", "Skip and keep the original background", "Salta y deja el fondo original", "--bg-skip"),
+    ]
+
+
 def build_next_steps(stage: str, plan: dict | None = None, error: str | None = None) -> list[dict]:
     plan = plan or {}
     if stage == "hook":
@@ -119,12 +148,7 @@ def build_next_steps(stage: str, plan: dict | None = None, error: str | None = N
             ("caption_place", "Move the captions if they cover the product", "Mueve los subtítulos si tapan el producto", "captions.y_ratio"),
         ]
     elif stage == "bg":
-        items = [
-            ("keep_bg", "Keep this background", "Quédate con este fondo", "--bg-yes"),
-            ("person_model", "Try the person-only model (it can erase a product)", "Prueba el modelo solo de persona (puede borrar el producto)", "--bg-model u2net_human_seg --bg-yes"),
-            ("threshold", "Adjust the mask threshold", "Ajusta el umbral de la máscara", "--bg-threshold 40 --bg-yes"),
-            ("skip_bg", "Skip and keep the original background", "Salta y deja el fondo original", "--bg-skip"),
-        ]
+        items = _bg_steps(plan)
     elif stage == "render":
         items = [
             ("export", "Export the MP4", "Exporta el MP4", "export"),

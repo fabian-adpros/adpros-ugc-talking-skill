@@ -51,7 +51,7 @@ WhisperX, si lo quieres:
 INSTALL_WHISPERX=1 ./install.sh
 ```
 
-Fondo opcional (quita el fondo y pone una imagen, un video, o un ProRes 4444 con alfa). Instala torch para CPU y `backgroundremover`. La primera vez baja los pesos `u2net` (unos 176 MB) a `~/.u2net`. El modelo por defecto es `u2net`, el de saliencia general, porque `u2net_human_seg` suele borrar el producto que la persona tiene en la mano. Va después de los cortes y antes de los subtítulos. La salida 13 muestra 3–5 cuadros lado a lado y espera. `--yes` no pregunta y deja el fondo original, salvo que el preset lo encienda.
+Fondo opcional (imagen, video, o ProRes 4444 con alfa). `./install.sh --with-bg` instala torch de CPU, BiRefNet_lite y `backgroundremover`. Si esos paquetes fallan, el script sale con error. La primera vez baja `ZhengPeng7/BiRefNet_lite` en la revisión `aa62cd87eafb` (MIT; ese repo se considera de confianza). `HF_TOKEN` es opcional y solo sube el límite del Hub. En CPU, BiRefNet_lite a lado corto 320 tardó unos 1,05 s por cuadro (clip de 11 s, 331 cuadros, unos 6 minutos). El CLI de U2-Net en el mismo clip tardó unos 72 s. MPS en Apple Silicon no se midió. La salida 13 muestra 3–5 cuadros y el motor que corrió. `--yes` no pregunta y deja el fondo original, salvo que el preset lo encienda.
 
 ```bash
 ./install.sh --with-bg
@@ -219,7 +219,7 @@ flowchart TD
 - El lugar de los subtítulos, el gancho en libass y el candado de sincronía se probaron con ffmpeg en Linux. No se volvieron a correr en macOS.
 - `captions.y_ratio` es fijo. En un reveal el subtítulo puede tapar el producto. No hay seguimiento del objeto.
 - El skill no traduce. Un clip en español sale en español.
-- El motor por defecto es BiRefNet_lite (MIT) cuando está instalado; si no, U2-Net. El lado corto por defecto es 320. El filtro guiado no se usa. Si un producto negro sigue desapareciendo, el siguiente paso es Grounded-SAM-2. Apple Silicon no se midió. El maestro con alfa no lleva los subtítulos quemados; van en el MP4 y en el SRT.
+- En un clip real de 11 s, BiRefNet_lite (lado corto 320, CPU) dejó sólidos la camiseta negra, la caja negra y la mano. Hubo una filtración breve cerca de los 5,0 s al levantar el producto. Unos 1,05 s por cuadro, cerca de 6 minutos para 331 cuadros. El CLI de U2-Net tardó unos 72 s. MPS en Apple Silicon no se midió. El maestro con alfa no lleva los subtítulos quemados; van en el MP4 y en el SRT.
 - Cada comando imprime `next_steps` en el idioma del clip (inglés o español) y lo guarda en `plan.json`.
 
 ### Roadmap (fase 2)
@@ -314,7 +314,7 @@ Optional WhisperX:
 INSTALL_WHISPERX=1 ./install.sh
 ```
 
-Optional background removal (an image, a video, or a ProRes 4444 alpha master). This installs the CPU torch wheel and `backgroundremover`. The first run downloads the `u2net` weights (about 176 MB) into `~/.u2net`. The default model is `u2net`, general saliency, because `u2net_human_seg` often erases a product held in the hand. It runs after the cuts and before captions. Exit 13 shows 3–5 side-by-side frames and waits. `--yes` skips the question and keeps the original background unless the preset turns it on.
+Optional background removal (an image, a video, or a ProRes 4444 alpha master). `./install.sh --with-bg` installs the CPU torch wheel, BiRefNet_lite, and `backgroundremover`. If those packages fail, the script exits non-zero. The first run downloads `ZhengPeng7/BiRefNet_lite` at revision `aa62cd87eafb` (MIT; that repo is trusted). `HF_TOKEN` is optional and only raises the Hub rate limit. On CPU, BiRefNet_lite at short side 320 took about 1.05 s/frame (11 s clip, 331 frames, about 6 minutes). The U2-Net CLI on the same clip took about 72 s. Apple Silicon MPS was not timed. Exit 13 shows 3–5 frames and the engine that ran. `--yes` skips the question and keeps the original background unless the preset turns it on.
 
 ```bash
 ./install.sh --with-bg
@@ -482,7 +482,7 @@ Run `./doctor.sh` first. A quiet first transcription is the model download. Exit
 - Caption placement, the libass hook, and the sync lock were checked with ffmpeg on Linux. They were not run again on macOS.
 - `captions.y_ratio` is a fixed line. During a product reveal the captions can cover the product. There is no object tracking.
 - The skill does not translate. A Spanish clip stays in Spanish.
-- The default engine is BiRefNet_lite (MIT) when it is installed, otherwise U2-Net. The default short side is 320. The guided filter is not used. If a black product still disappears, Grounded-SAM-2 is the next step. Apple Silicon was not measured. The alpha master does not have burned-in captions; those are on the MP4 and in the SRT.
+- On a real 11 s clip, BiRefNet_lite (short side 320, CPU) kept a black shirt, a black product box, and a waving hand. There was a brief leak around 5.0 s during a lift. About 1.05 s/frame, about 6 minutes for 331 frames. The U2-Net CLI took about 72 s. Apple Silicon MPS was not timed. The alpha master does not have burned-in captions; those are on the MP4 and in the SRT.
 - Every command prints `next_steps` in the clip language (English or Spanish) and stores the list on `plan.json`.
 
 ### Roadmap (phase 2)

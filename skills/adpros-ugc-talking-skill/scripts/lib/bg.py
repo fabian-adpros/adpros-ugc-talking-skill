@@ -795,31 +795,43 @@ def export_bg_layers(workdir: Path, media: Path, plan: dict) -> list[str]:
     return written
 
 
+def _engine_label(state: dict) -> str:
+    engine = state.get("engine_used") or state.get("engine") or "birefnet"
+    if engine == "u2net":
+        return f"engine: u2net\nmodel: {state.get('model') or 'u2net'}"
+    if engine == "ben2":
+        return "engine: ben2\nweights: PramaLLC/BEN2"
+    return "engine: birefnet\nweights: ZhengPeng7/BiRefNet_lite"
+
+
 def bg_checkpoint_message(ui: str, frames: list[str], state: dict) -> str:
     files = "\n".join(frames)
     plate = "magenta" if state.get("mode") == "transparent" else str(state.get("file"))
+    label = _engine_label(state)
     if ui == "es":
         return (
             "exit: 13\n"
             "question: background\n"
-            f"model: {state.get('model')}\n"
+            f"{label}\n"
             f"mode: {state.get('mode')}\n"
             f"plate: {plate}\n"
             "Compara el original (izquierda) con el fondo nuevo (derecha). "
             "En modo transparente la derecha es el sujeto sobre magenta para ver los huecos.\n"
             "Si el producto en la mano o las manos desaparecen o parpadean, no lo des por bueno.\n"
             f"{files}\n"
-            "Opciones: --bg-yes | --bg-model u2net_human_seg --bg-yes | --bg-threshold 40 --bg-yes | --bg-skip"
+            "Opciones: --bg-yes | --bg-engine u2net --bg-yes | --bg-engine ben2 --bg-yes | "
+            "--bg-infer-size 512 --bg-smooth 5 --bg-yes | --bg-skip"
         )
     return (
         "exit: 13\n"
         "question: background\n"
-        f"model: {state.get('model')}\n"
+        f"{label}\n"
         f"mode: {state.get('mode')}\n"
         f"plate: {plate}\n"
         "Compare the original (left) with the new background (right). "
         "In transparent mode the right side is the subject over magenta so holes show.\n"
         "Do not approve it if a hand-held product or the hands are cut out or flicker.\n"
         f"{files}\n"
-        "Options: --bg-yes | --bg-model u2net_human_seg --bg-yes | --bg-threshold 40 --bg-yes | --bg-skip"
+        "Options: --bg-yes | --bg-engine u2net --bg-yes | --bg-engine ben2 --bg-yes | "
+        "--bg-infer-size 512 --bg-smooth 5 --bg-yes | --bg-skip"
     )

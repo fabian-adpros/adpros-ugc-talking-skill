@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1] / "skills" / "adpros-ugc-talking-skil
 sys.path.insert(0, str(ROOT))
 
 from lib.bg import (  # noqa: E402
+    bg_checkpoint_message,
     composite_subject,
     ensure_subject,
     export_bg_layers,
@@ -30,6 +31,7 @@ from lib.bg import (  # noqa: E402
     _matte_key,
     _subject_key,
 )
+from lib.engine import BIREFNET_REVISION  # noqa: E402
 from lib.engine import predict_masks, select_engine  # noqa: E402
 from lib.config import DEFAULTS  # noqa: E402
 from lib.matte import morph_close, smooth_alpha, working_size  # noqa: E402
@@ -558,3 +560,35 @@ def test_engine_selection_falls_back_and_mock_model_is_called(monkeypatch):
     monkeypatch.setattr("lib.engine._birefnet_masks", fake)
     assert predict_masks(["frame"], "birefnet", "u2net", "cpu") == ["mask"]
     assert seen["frames"] == 1
+
+
+def test_with_bg_install_does_not_pin_numpy_1_and_fails_closed():
+    script = (
+        Path(__file__).resolve().parents[1] / "skills" / "adpros-ugc-talking-skill" / "install.sh"
+    ).read_text(encoding="utf-8")
+    assert "numpy<2" not in script
+    bg = script.split('if [[ "$WITH_BG" == "1" ]]; then', 1)[1].split("\nfi", 1)[0]
+    assert "exit 1" in bg
+    assert "|| echo" not in bg
+
+
+def test_exit_13_names_birefnet_and_followups_are_engine_aware():
+    message = bg_checkpoint_message(
+        "en",
+        ["frame.jpg"],
+        {"engine": "birefnet", "engine_used": "birefnet", "model": "u2net", "mode": "replace", "file": "plate.png"},
+    )
+    assert "engine: birefnet" in message
+    assert "BiRefNet_lite" in message
+    assert "model: u2net" not in message
+    assert "u2net_human_seg" not in message
+    steps = build_next_steps("bg", {"bg": {"engine_used": "birefnet"}})
+    commands = " ".join(step["command"] or "" for step in steps)
+    assert "--bg-engine u2net" in commands
+    assert "--bg-engine ben2" in commands
+    assert "u2net_human_seg" not in commands
+    assert all(step["es"] for step in steps)
+    spanish = bg_checkpoint_message("es", ["frame.jpg"], {"engine_used": "u2net", "model": "u2net", "mode": "replace", "file": "plate.png"})
+    assert "engine: u2net" in spanish
+    assert "model: u2net" in spanish
+    assert len(BIREFNET_REVISION) == 40

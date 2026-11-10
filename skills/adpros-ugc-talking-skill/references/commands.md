@@ -56,7 +56,9 @@ Preview JPEGs append `format=yuvj420p` and `-strict unofficial`. ffmpeg 7.1 reje
 
 `backgroundremover` `Net.forward` interpolates to 320×320, `iter_frames` resizes to height 320, and `RescaleT` also squares to 320. None of those take a size argument. The sized pass is this skill's Python call when the package imports.
 
-BiRefNet_lite was run here on CPU torch 2.15, ffmpeg 6.1.1, on an 8-frame synthetic 180×320 clip (white field, black rectangle). `infer_size` 320 became 320×576. Inference was 9.1 s for 8 frames, about 1.13 s/frame, after the MIT weights were already cached. The black rectangle landed at mask value 255 and a corner of the white field at 1. The fitted matte matched the cut size, 180×320. An 11 s / 331-frame clip at that rate is on the order of 6 minutes. That full clip was not run here. The guided filter is not called.
+BiRefNet_lite is loaded from `ZhengPeng7/BiRefNet_lite` revision `aa62cd87eafb9cc43056d08ef3615a14628b831d` with `trust_remote_code`. That revision is MIT. Hub warnings are suppressed. `HF_TOKEN` or `HUGGING_FACE_HUB_TOKEN` is passed when set.
+
+A real 11 s 1080×1920 clip, 331 frames, CPU, short side 320: BiRefNet_lite about 1.05 s/frame (about 6 minutes). The U2-Net CLI on that clip was about 72 s. Apple Silicon MPS was not timed. An 8-frame synthetic check on this machine (white field, black rectangle, 320×576) kept the rectangle at mask 255. The guided filter is not called.
 
 ## faster-whisper 1.2.1
 

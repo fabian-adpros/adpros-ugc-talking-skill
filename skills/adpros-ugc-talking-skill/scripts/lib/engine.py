@@ -10,6 +10,8 @@ from __future__ import annotations
 
 ENGINES = ("birefnet", "ben2", "u2net")
 BIREFNET_ID = "ZhengPeng7/BiRefNet_lite"
+# MIT model card commit. Pinned so the download does not float.
+BIREFNET_REVISION = "aa62cd87eafb9cc43056d08ef3615a14628b831d"
 BEN2_ID = "PramaLLC/BEN2"
 
 
@@ -95,7 +97,29 @@ def predict_masks(frames, engine: str, model_name: str, device):
     return _u2net_masks(frames, model_name or "u2net", device)
 
 
+def _quiet_hub() -> None:
+    """The pinned BiRefNet repo is MIT and trusted. Hub login stays optional."""
+    import logging
+    import os
+    import warnings
+
+    os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
+    os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
+    warnings.filterwarnings("ignore", message=".*trust_remote_code.*")
+    warnings.filterwarnings("ignore", message=".*[Uu]nauthenticated.*")
+    logging.getLogger("transformers").setLevel(logging.ERROR)
+    logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
+    try:
+        from huggingface_hub.utils import logging as hf_logging
+
+        hf_logging.set_verbosity_error()
+    except Exception:
+        pass
+
+
 def _birefnet_masks(frames, device):
+    import os
+
     import numpy as np
     import torch
     from PIL import Image
@@ -105,7 +129,17 @@ def _birefnet_masks(frames, device):
     key = ("birefnet", str(device))
     model = _MODELS.get(key)
     if model is None:
-        model = AutoModelForImageSegmentation.from_pretrained(BIREFNET_ID, trust_remote_code=True)
+        _quiet_hub()
+        token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN")
+        print(
+            "bg: loading ZhengPeng7/BiRefNet_lite "
+            f"revision {BIREFNET_REVISION[:12]} (MIT). "
+            "That repo's code is trusted. Set HF_TOKEN if you want a higher Hub rate limit."
+        )
+        kwargs = {"revision": BIREFNET_REVISION, "trust_remote_code": True}
+        if token:
+            kwargs["token"] = token
+        model = AutoModelForImageSegmentation.from_pretrained(BIREFNET_ID, **kwargs)
         model.to(device)
         model.eval()
         _MODELS[key] = model

@@ -88,14 +88,17 @@ fi
 
 if [[ "$WITH_BG" == "1" ]]; then
   log "Optional background removal (CPU PyTorch, BiRefNet_lite, U2-Net fallback)"
-  "$SKILL_DIR/.venv/bin/pip" install torch torchvision --index-url https://download.pytorch.org/whl/cpu \
-    && "$SKILL_DIR/.venv/bin/pip" install 'numpy<2' 'transformers>=4.44' timm kornia einops pillow backgroundremover \
-    || echo "Background extras did not fully install. Re-run ./install.sh --with-bg. U2-Net remains the fallback when BiRefNet cannot import."
-  echo "First BiRefNet run downloads ZhengPeng7/BiRefNet_lite (MIT code and MIT weights) from Hugging Face."
+  if ! "$SKILL_DIR/.venv/bin/pip" install torch torchvision --index-url https://download.pytorch.org/whl/cpu \
+    || ! "$SKILL_DIR/.venv/bin/pip" install numpy 'transformers>=4.44' timm kornia einops pillow backgroundremover; then
+    echo "Background extras failed to install. ./install.sh --with-bg did not finish. doctor will show birefnet as not installed." >&2
+    exit 1
+  fi
+  echo "First BiRefNet run downloads ZhengPeng7/BiRefNet_lite revision aa62cd87eafb (MIT code and MIT weights)."
+  echo "A Hub login is optional. Set HF_TOKEN if you want a higher rate limit. The skill trusts that repo."
   echo "U2-Net weights (about 176 MB, Apache-2.0) download into ~/.u2net if that fallback runs."
   echo "BEN2 base is optional and MIT (PramaLLC/BEN2). It is not installed here: pip install the ben2 package if you want --bg-engine ben2."
   echo "Device order is MPS, then CUDA, then CPU. This install path is the CPU wheel. Apple Silicon speed was not measured."
-  echo "On CPU, BiRefNet_lite at short side 320 is slower per frame than U2-Net. Short side 1024 is much slower. Default infer_size is 320."
+  echo "On a measured CPU run, BiRefNet_lite at short side 320 took about 1.05 s/frame (about 6 minutes for 331 frames). The U2-Net CLI took about 72 s on the same 11 s clip."
 fi
 
 log "Remotion template"
