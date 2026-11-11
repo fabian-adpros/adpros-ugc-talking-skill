@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 
-STAGES = ("hook", "delivery", "storyboard", "bg", "render", "final", "error", "transcribe")
+STAGES = ("hook", "delivery", "storyboard", "bg", "bg_cost", "render", "final", "error", "transcribe")
 
 
 def _short(text: str, limit: int = 160) -> str:
@@ -124,6 +124,49 @@ def _bg_steps(plan: dict | None) -> list[tuple]:
     ]
 
 
+def _bg_cost_steps(plan: dict | None = None) -> list[tuple]:
+    third = (
+        "smaller_infer",
+        "Lower the inference size",
+        "Baja el tamaño de inferencia",
+        "--bg-infer-size 256 --bg-go",
+    )
+    if (plan or {}).get("suggest_apple_vision"):
+        third = (
+            "apple_vision",
+            "Use the Mac person cutout (about 0.24 s/frame on one measured clip, roughly 5 min for 1,270 frames). People only: a product in the hand can be erased. Face, hair, and hands held; the shirt edge was a little rougher.",
+            "Usa el recorte de persona del Mac (unos 0,24 s/cuadro en un clip medido, cerca de 5 min para 1.270 cuadros). Solo personas: un producto en la mano puede desaparecer. Cara, pelo y manos se sostuvieron; el borde de la camiseta quedó un poco más tosco.",
+            "--bg-engine apple-vision --bg-go",
+        )
+    return [
+        ("bg_go", "Continue with this background anyway", "Sigue con este fondo de todos modos", "--bg-go"),
+        ("faster_u2net", "Use the faster U2-Net engine", "Usa el motor U2-Net, que es más rápido", "--bg-engine u2net --bg-go"),
+        third,
+        ("skip_bg", "Skip the background and keep the original", "Salta el fondo y deja el original", "--bg-skip"),
+    ]
+
+
+MECHANICAL_STAGES = {"transcribe", "delivery", "render", "error"}
+CREATIVE_STAGES = {"hook", "storyboard", "bg", "bg_cost", "final"}
+
+
+def model_tip(stage: str) -> dict | None:
+    """One short note per stage. Not a numbered choice."""
+    if stage in MECHANICAL_STAGES:
+        return {
+            "kind": "lighter",
+            "en": "Mechanical step. In Claude Code, /model sonnet (or haiku) applies on the next message; this chat stays.",
+            "es": "Paso mecánico. En Claude Code, /model sonnet (o haiku) vale en el siguiente mensaje; esta charla sigue.",
+        }
+    if stage in CREATIVE_STAGES:
+        return {
+            "kind": "top",
+            "en": "Judgement step. In Claude Code, /model opus applies on the next message; this chat stays.",
+            "es": "Paso de criterio. En Claude Code, /model opus vale en el siguiente mensaje; esta charla sigue.",
+        }
+    return None
+
+
 def build_next_steps(stage: str, plan: dict | None = None, error: str | None = None) -> list[dict]:
     plan = plan or {}
     if stage == "hook":
@@ -145,10 +188,17 @@ def build_next_steps(stage: str, plan: dict | None = None, error: str | None = N
             ("approve_board", "Approve the storyboard and render", "Aprueba el storyboard y renderiza", "--storyboard-yes"),
             ("change_hook", "Change the hook first", "Cambia el gancho primero", "--hook \"...\""),
             ("skip_review", "Skip the storyboard review", "Salta la revisión del storyboard", "--no-review-storyboard"),
-            ("caption_place", "Move the captions if they cover the product", "Mueve los subtítulos si tapan el producto", "captions.y_ratio"),
+            (
+                "bg_moments",
+                "New background only on 3 or 4 moments (hook, a contrast, the close)",
+                "Fondo nuevo solo en 3 o 4 momentos (gancho, un contraste, el cierre)",
+                "--bg-moments 0-3,12-15,20-23",
+            ),
         ]
     elif stage == "bg":
         items = _bg_steps(plan)
+    elif stage == "bg_cost":
+        items = _bg_cost_steps(plan)
     elif stage == "render":
         items = [
             ("export", "Export the MP4", "Exporta el MP4", "export"),
@@ -203,13 +253,18 @@ def build_next_steps(stage: str, plan: dict | None = None, error: str | None = N
 
 def print_next_steps(stage: str, ui: str, plan: dict | None = None, error: str | None = None) -> list[dict]:
     steps = build_next_steps(stage, plan, error)
+    tip = model_tip(stage)
     if plan is not None:
         plan["next_steps"] = steps
+        if tip:
+            plan["model_tip"] = tip
+    if tip:
+        print(tip["es"] if ui == "es" else tip["en"])
     title = "Qué sigue" if ui == "es" else "What's next"
     print(title)
     for step in steps:
         text = step["es"] if ui == "es" else step["en"]
         hint = f"  ({step['command']})" if step.get("command") else ""
         print(f"{step['n']}. {text}{hint}")
-    print(json.dumps({"next_steps": steps}, ensure_ascii=False))
+    print(json.dumps({"next_steps": steps, "model_tip": tip}, ensure_ascii=False))
     return steps

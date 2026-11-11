@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires ffmpeg (libass, libx264, aac, loudnorm), Python 3.10+, and faster-whisper or WhisperX. auto-editor is the preferred silence engine. Node.js and Remotion are optional; FFmpeg renders if they are missing. CPU or CUDA. English and Spanish. No hosted API.
 metadata:
   author: Fabian
-  version: "0.3.0"
+  version: "0.3.1"
   languages: "en,es"
 ---
 
@@ -16,6 +16,8 @@ Public skill id: `adpros-ugc-talking-skill`. Invoke it with `/adpros-ugc-talking
 Reply in the user's language. Spanish in, Spanish out. English in, English out. The clip's language is separate: captions, fillers, and the hook stay in the language spoken on camera.
 
 One raw vertical phone clip becomes a 1080x1920 MP4. You do not invent timestamps. The scripts do.
+
+Never write your own ffmpeg cut, and never run one ffmpeg per kept segment. That re-reads the whole clip every time and, with a slow encode, turns a re-cut into many minutes. Always call `scripts/ugc_edit.py`. It decodes the source once, builds every kept range in one filter graph, and encodes the intermediate at normal quality (`libx264` CRF 18, preset `veryfast`, or VideoToolbox H.264 on a Mac when that encoder exists). Do not use CRF 14 or preset `medium` for a working file.
 
 ## Resolve the skill directory
 
@@ -99,7 +101,27 @@ Exit 13 is the background checkpoint, not a failure. The command writes 3–5 si
 
 `bg.engine` is `birefnet`, `ben2`, or `u2net`. The default is `birefnet` (Hugging Face `ZhengPeng7/BiRefNet_lite`, MIT code and MIT weights) when `./install.sh --with-bg` has installed torch, transformers, timm, and kornia. If that import fails and the user did not pass `--bg-engine`, the run falls back to `u2net` and says so. `--bg-engine ben2` uses the MIT base `PramaLLC/BEN2` only when that package is installed. It is not part of `--with-bg`. U2-Net often drops a black shirt or a black product box. BiRefNet is the general-subject net meant to keep those. The device order is MPS, then CUDA, then CPU. Apple Silicon speed was not measured.
 
-`bg.infer_size` is the short side, aspect kept, default 320. On CPU, BiRefNet_lite at that size took about 1.05 s/frame on an 11 s clip (331 frames, about 6 minutes). The U2-Net CLI on the same clip took about 72 s. Apple Silicon MPS is selected when it exists and was not timed. The command prints `bg: ... per_frame=...s`. A reused matte prints `bg: reused the existing matte`.
+`bg.infer_size` is the short side, aspect kept, default 320. On CPU, BiRefNet_lite at that size took about 1.05 s/frame on an 11 s clip (331 frames, about 6 minutes). The U2-Net CLI on the same clip took about 72 s. Before it starts, the script prints the device, the frame count, and that estimate. If the device is CPU and the estimate is longer than about 3 minutes, it stops (exit 14). The follow-ups are: continue, switch to U2-Net, lower the inference size, or skip the background. Apple Silicon uses MPS when `torch.backends.mps` is available, with `PYTORCH_ENABLE_MPS_FALLBACK=1` and fp32. That speed was not measured. The command prints `bg: ... per_frame=...s`. A reused matte prints `bg: reused the existing matte`.
+
+Do not run `./install.sh --with-bg` unless the user asked for a new background. When they pass `--bg` and the engine is missing, the script starts that install itself, in the background, while transcription and the cut continue. The first install is about 1 GB and often several minutes.
+
+If BiRefNet is started on Apple's GPU and that path crashes, the full error is written to `bg-infer.log`. The model is loaded in fp32 and `PYTORCH_ENABLE_MPS_FALLBACK=1` is set before the attempt. After a crash the script does not quietly switch to a long CPU run: if that CPU estimate is over about 3 minutes it stops (exit 14) and offers the same choices, including the Mac person cutout when there is no product in the storyboard. This crash path was not re-run on a Mac here.
+
+`apple-vision` uses the Mac's built-in person segmentation. On one Mac clip, 30 frames took 7 seconds (about 0.24 s/frame), and 1,270 frames would be about 5 minutes. Face, hair, and hands held. The shirt edge on the left shoulder was a little rougher than BiRefNet. It segments people only, so recommend it for a talking head with no product, and BiRefNet when a product is in the hand. It cannot be tested on Linux.
+
+`--bg-moments 0-3,12-15,20-23` changes the background only in those stretches. Propose 3 or 4 of them from the transcript at the storyboard step: the hook, one contrast, the close. The original room stays everywhere else.
+
+## Which model should run which step
+
+Say this once, at the start of the stage, in the user's language. Do not repeat it on later messages of the same stage.
+
+Mechanical steps (install, transcription, the cut, a background batch, turning masks into video, a re-render whose settings are already chosen, export): a lighter model is enough. In Claude Code, `/model sonnet` or `/model haiku` applies on the next message. The conversation stays.
+
+Judgement steps (the hook, the storyboard, where to zoom, which moments get a new background, sound effects, when a pop-up appears, reviewing the final picture): use the top model. In Claude Code, `/model opus` applies on the next message. The conversation stays.
+
+Pasos mecánicos (instalación, transcripción, el corte, el lote de fondo, convertir máscaras en video, un re-render con ajustes ya decididos, exportar): basta un modelo más ligero. En Claude Code, `/model sonnet` o `/model haiku` vale en el siguiente mensaje. La conversación sigue.
+
+Pasos de criterio (el gancho, el storyboard, dónde hacer zoom, qué momentos cambian de fondo, efectos de sonido, cuándo sale un texto, revisar la imagen final): usa el modelo de arriba. En Claude Code, `/model opus` vale en el siguiente mensaje. La conversación sigue.
 
 The matte is scaled to the cut before it is composited. A temporal median (`bg.temporal_smooth`, default 3) and a small close run on the alpha. The guided filter is not used: it copied the picture into the mask. `--bg-refine` only blurs the alpha, and it is off unless you pass it. A cut that is unchanged is not encoded again, so approving the preview does not run the model a second time.
 
@@ -131,7 +153,7 @@ Exit 10 is the hook. Exit 11 is the delivery questionnaire. Exit 12 is the story
 
 Close every stage and every checkpoint with a short "What's next" / "Qué sigue" block. Use the `next_steps` list the command just printed. The same list is stored on `plan.json`. Show 2–4 of those options as a numbered list the user can answer with a number. Do this in Claude.ai and in Claude Code. Match the user's language.
 
-The checkpoints are the hook (exit 10), the delivery questionnaire (exit 11), the storyboard review (exit 12), the background preview (exit 13), the styled render, the final export, and any exit 2 error. After a final render the list can include changing the hook, trying another background, exporting for Premiere, Final Cut, and Resolve, making a 1:1 or 4:5 version, moving captions when they cover the product, and making another video with the same preset. After an error, the first item is the likely fix and the exact next command. Do not invent a different command when `next_steps` already names one.
+The checkpoints are the hook (exit 10), the delivery questionnaire (exit 11), the storyboard review (exit 12), the background preview (exit 13), a long CPU background estimate (exit 14), the styled render, the final export, and any exit 2 error. After a final render the list can include changing the hook, trying another background, exporting for Premiere, Final Cut, and Resolve, making a 1:1 or 4:5 version, moving captions when they cover the product, and making another video with the same preset. After an error, the first item is the likely fix and the exact next command. Do not invent a different command when `next_steps` already names one.
 
 Details live in the reference files. Open only the one you need.
 
@@ -161,7 +183,7 @@ Read [references/hook.md](references/hook.md) before you replace the suggestion.
 ## Defaults you should not silently change
 
 - Fillers: `conservative`. Use `--mode aggressive` only when the user asks to strip more (`agresivo`, `quita todas las muletillas`, `aggressive`).
-- Silence: longer than 0.4s, 0.05s of padding on each side. Engine `auto` uses auto-editor when it is installed, otherwise word gaps.
+- Silence: longer than 0.4s, 0.12s of padding on each side, plus a 15ms fade at each join. After the plan, the cut measures the audio at each join and widens the pad if the cut still lands on speech. Engine `auto` uses auto-editor when it is installed, otherwise word gaps.
 - Captions: 2–3 words in the lower safe area, horizontally centered, active word in yellow. `captions.y_ratio` moves the line. The default is 0.75. This does not detect a face.
 - Hook on screen for the first 3 seconds.
 - Music bed at about −18 dB under the voice. The shipped bed is `assets/music/bed.m4a`. Replace it with `--music`.

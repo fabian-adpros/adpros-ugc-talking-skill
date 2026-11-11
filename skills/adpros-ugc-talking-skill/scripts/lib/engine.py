@@ -8,7 +8,7 @@ not this package. Neither weight file is committed here. They download on first 
 
 from __future__ import annotations
 
-ENGINES = ("birefnet", "ben2", "u2net")
+ENGINES = ("birefnet", "ben2", "u2net", "apple-vision")
 BIREFNET_ID = "ZhengPeng7/BiRefNet_lite"
 # MIT model card commit. Pinned so the download does not float.
 BIREFNET_REVISION = "aa62cd87eafb9cc43056d08ef3615a14628b831d"
@@ -50,9 +50,20 @@ def select_engine(requested: str, explicit: bool = False) -> tuple[str, str]:
     name = (requested or "birefnet").lower()
     if name not in ENGINES:
         raise UGCError(
-            f"Unknown background engine {name}. Use birefnet, ben2, or u2net.",
-            f"Motor de fondo desconocido {name}. Usa birefnet, ben2 o u2net.",
+            f"Unknown background engine {name}. Use birefnet, ben2, u2net, or apple-vision.",
+            f"Motor de fondo desconocido {name}. Usa birefnet, ben2, u2net o apple-vision.",
         )
+    if name == "apple-vision":
+        from .applevision import supported
+
+        if supported():
+            return "apple-vision", ""
+        if explicit:
+            raise UGCError(
+                "apple-vision only runs on macOS. It segments people, so a product in the hand can be erased.",
+                "apple-vision solo corre en macOS. Separa personas, así que un producto en la mano puede desaparecer.",
+            )
+        return "birefnet", "apple-vision is macOS-only, so this run stayed on birefnet."
     if name == "birefnet":
         if birefnet_available():
             return "birefnet", ""
@@ -75,14 +86,68 @@ def select_engine(requested: str, explicit: bool = False) -> tuple[str, str]:
 
 
 def pick_device():
+    import os
+
     import torch
 
+    # Some BiRefNet ops are missing on MPS. Falling back keeps the run alive.
+    os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
     mps = getattr(torch.backends, "mps", None)
     if mps is not None and mps.is_available():
+        # fp32. fp16 on MPS hits unimplemented ops and the fallback is slower.
         return torch.device("mps")
     if torch.cuda.is_available():
         return torch.device("cuda")
     return torch.device("cpu")
+
+
+# Seconds per frame at short side 320, unless noted.
+# birefnet CPU: 1.6 s/frame on one Mac after MPS crashed (1,270 frames, about 34 min).
+#   An earlier CPU clip was about 1.05 s/frame (331 frames, about 6 min). The estimate uses 1.6.
+# u2net CLI: about 72s for that 331-frame clip.
+# apple-vision: 30 frames in 7s on that same Mac, about 0.24 s/frame, about 5 min for 1,270 frames.
+CPU_SECONDS_PER_FRAME = {
+    "birefnet": 1.6,
+    "u2net": 72.0 / 331.0,
+    "ben2": 1.2,
+    "apple-vision": 0.24,
+}
+BG_COST_LIMIT_SECONDS = 180.0
+
+
+def estimate_bg_seconds(engine: str, frames: int, device: str, infer_size: int) -> float | None:
+    """CPU estimate scaled by resolution. MPS has no measurement, so it returns None."""
+    if device == "mps":
+        return None
+    base = CPU_SECONDS_PER_FRAME.get(engine, CPU_SECONDS_PER_FRAME["birefnet"])
+    scale = (max(64, int(infer_size)) / 320.0) ** 2
+    if device == "cuda":
+        scale *= 0.15
+    return base * max(0, int(frames)) * scale
+
+
+def bg_cost_should_stop(device: str, estimate_seconds: float | None, approved: bool) -> bool:
+    if approved or estimate_seconds is None:
+        return False
+    return device == "cpu" and estimate_seconds > BG_COST_LIMIT_SECONDS
+
+
+def mps_crash_action(estimate_seconds: float | None, approved: bool) -> str:
+    """What to do after BiRefNet crashes on MPS.
+
+    `checkpoint` asks the user before a long CPU run. `cpu` continues on CPU
+    because they already accepted the wait, or the estimate is short.
+    """
+    if bg_cost_should_stop("cpu", estimate_seconds, approved):
+        return "checkpoint"
+    return "cpu"
+
+
+def device_name() -> str:
+    try:
+        return str(pick_device())
+    except Exception:
+        return "cpu"
 
 
 _MODELS: dict = {}
@@ -140,6 +205,8 @@ def _birefnet_masks(frames, device):
         if token:
             kwargs["token"] = token
         model = AutoModelForImageSegmentation.from_pretrained(BIREFNET_ID, **kwargs)
+        # fp32. fp16 on MPS crashes or falls through on ops this model uses.
+        model.float()
         model.to(device)
         model.eval()
         _MODELS[key] = model

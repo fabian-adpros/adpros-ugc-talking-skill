@@ -8,6 +8,7 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -22,7 +23,30 @@ jobs:
           cache-dependency-path: skills/adpros-ugc-talking-skill/template/package-lock.json
 
       - name: Install ffmpeg
-        run: sudo apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y ffmpeg libxml2-utils
+        run: |
+          set -euo pipefail
+          if ! timeout 90 sudo apt-get update || ! timeout 180 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y ffmpeg libxml2-utils; then
+            echo "Ubuntu archive is unreachable; installing ffmpeg 8.1 and xmllint from GitHub"
+            mkdir -p "$HOME/.local/bin" /tmp/ffmpeg-extract /tmp/src
+            curl -fsSL -o /tmp/ffmpeg.tar.xz \
+              "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n8.1-latest-linux64-gpl-8.1.tar.xz"
+            tar -xJf /tmp/ffmpeg.tar.xz -C /tmp/ffmpeg-extract
+            install -m 755 "$(find /tmp/ffmpeg-extract -type f -name ffmpeg -print -quit)" "$HOME/.local/bin/ffmpeg"
+            install -m 755 "$(find /tmp/ffmpeg-extract -type f -name ffprobe -print -quit)" "$HOME/.local/bin/ffprobe"
+            git clone --depth 1 --branch v2.13.9 https://github.com/GNOME/libxml2.git /tmp/src/libxml2
+            cmake -S /tmp/src/libxml2 -B /tmp/src/libxml2/build \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DBUILD_SHARED_LIBS=OFF \
+              -DLIBXML2_WITH_PYTHON=OFF \
+              -DLIBXML2_WITH_TESTS=OFF
+            cmake --build /tmp/src/libxml2/build --target xmllint -j"$(nproc)"
+            install -m 755 /tmp/src/libxml2/build/xmllint "$HOME/.local/bin/xmllint"
+            echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          fi
+          command -v ffmpeg
+          command -v xmllint
+          ffmpeg -hide_banner -version
+          xmllint --version
 
       - name: Unit tests
         run: |

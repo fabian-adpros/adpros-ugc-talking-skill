@@ -20,7 +20,19 @@ import subprocess
 import time
 from pathlib import Path
 
-from .engine import pick_device, predict_masks, select_engine, u2net_python_available
+from .engine import (
+    ben2_available,
+    birefnet_available,
+    device_name,
+    estimate_bg_seconds,
+    bg_cost_should_stop,
+    mps_crash_action,
+    pick_device,
+    predict_masks,
+    select_engine,
+    u2net_python_available,
+)
+from .moments import build_moment_extract_command, parse_moments, partial_composite_graph
 from .matte import smooth_alpha, working_size
 from .media import probe, run_cmd
 from .render import cut_stamp_path
@@ -28,6 +40,16 @@ from .util import UGCError, load_json
 
 MODELS = ("u2net", "u2net_human_seg", "u2netp")
 AWAITING_BG = 13
+AWAITING_BG_COST = 14
+
+
+class BgCostCheckpoint(Exception):
+    """MPS failed and the CPU fallback would take more than a few minutes."""
+
+    def __init__(self, en: str, es: str):
+        super().__init__(en)
+        self.en = en
+        self.es = es
 _PRODUCT_LABELS = ("product_visible", "product_reveal", "hands")
 
 
@@ -67,6 +89,13 @@ def resolve_bg(args, preset: dict, plan: dict | None) -> dict:
     engine, explicit = _pick_engine(args, saved, cfg)
     settings["engine"] = engine
     settings["engine_explicit"] = explicit
+    moments = getattr(args, "bg_moments", None)
+    if moments:
+        settings["segments"] = parse_moments(moments)
+    elif saved.get("segments"):
+        settings["segments"] = saved["segments"]
+    else:
+        settings["segments"] = []
     if skip or flag == "keep":
         return _state(False, "keep", None, model, threshold, True, [], settings)
 
@@ -185,6 +214,8 @@ def _choice_changed(args, saved: dict, flag, file, mode: str) -> bool:
         return True
     if getattr(args, "bg_feather", None) is not None and int(args.bg_feather) != saved.get("feather"):
         return True
+    if getattr(args, "bg_moments", None) and parse_moments(args.bg_moments) != (saved.get("segments") or []):
+        return True
     if flag == "transparent" and saved.get("mode") != "transparent":
         return True
     if flag and flag not in ("transparent", "keep") and str(file) != str(saved.get("file")):
@@ -236,40 +267,67 @@ def write_matte(src: Path, dest: Path, model: str = "u2net") -> None:
 
 
 def render_matte(src: Path, dest: Path, state: dict) -> None:
-    """Write a matte at the cut's size. The guided filter is not used."""
+    """Write a matte at the cut's size. The guided filter is not used.
+
+    When `segments` is set, only those stretches are segmented. The matte is
+    black everywhere else, so the original picture can stay.
+    """
     _bind_engine(state)
     engine = state.get("engine_used") or "u2net"
+    segments = state.get("segments") or []
+    model_src = src
+    model_dest = dest
+    if segments:
+        info = probe(src)
+        model_src = dest.with_name("bg-moments.mp4")
+        model_dest = dest.with_name("bg-moments-matte.mp4")
+        run_cmd(build_moment_extract_command(src, model_src, segments, int(round(float(info.get("fps") or 30)))))
     started = time.perf_counter()
-    if engine != "u2net" or u2net_python_available():
-        try:
-            infer_matte(src, dest, state)
-        except UGCError:
-            raise
-        except Exception as exc:
-            raise UGCError(
-                f"Background model {engine} failed ({exc}). Try --bg-engine u2net or ./install.sh --with-bg.",
-                f"Falló el modelo de fondo {engine} ({exc}). Prueba --bg-engine u2net o ./install.sh --with-bg.",
-            ) from exc
-        refine_started = time.perf_counter()
-        fit_matte(src, dest, {**state, "temporal_smooth": 0})
+    try:
+        if engine == "apple-vision":
+            from .applevision import command, ensure_binary
+
+            run_cmd(command(ensure_binary(), model_src, model_dest, state.get("vision_quality") or "accurate"))
+            state["timings"] = {
+                "path": "apple-vision",
+                "engine": "apple-vision",
+                "device": "apple-vision",
+                "per_frame_s": 0.24,
+                "reused": False,
+                "note": "0.24 s/frame measured on one Mac clip. People only.",
+            }
+        elif engine != "u2net" or u2net_python_available():
+            infer_matte(model_src, model_dest, state)
+        else:
+            write_matte(model_src, model_dest, state.get("model") or "u2net")
+            state["timings"] = {
+                "path": "cli",
+                "engine": "u2net",
+                "device": "cli",
+                "infer_s": round(time.perf_counter() - started, 3),
+                "infer_size": None,
+                "frames": None,
+                "reused": False,
+                "note": "backgroundremover CLI resizes to height 320 and squares to 320. No Python engine was importable.",
+            }
+    except BgCostCheckpoint:
+        raise
+    except UGCError:
+        raise
+    except Exception as exc:
+        raise UGCError(
+            f"Background model {engine} failed ({exc}). Try --bg-engine u2net or ./install.sh --with-bg.",
+            f"Falló el modelo de fondo {engine} ({exc}). Prueba --bg-engine u2net o ./install.sh --with-bg.",
+        ) from exc
+    if segments:
+        place_moments_matte(model_dest, dest, segments, probe(src))
+    elif model_dest != dest and model_dest.exists():
+        model_dest.replace(dest)
+    refine_started = time.perf_counter()
+    fit_matte(src, dest, {**state, "temporal_smooth": 0})
+    if state.get("timings") is not None:
         state["timings"]["refine_s"] = round(time.perf_counter() - refine_started, 3)
         state["timings"]["total_s"] = round(time.perf_counter() - started, 3)
-    else:
-        write_matte(src, dest, state.get("model") or "u2net")
-        infer_s = round(time.perf_counter() - started, 3)
-        refine_started = time.perf_counter()
-        fit_matte(src, dest, state)
-        state["timings"] = {
-            "path": "cli",
-            "engine": "u2net",
-            "device": "cli",
-            "infer_s": infer_s,
-            "refine_s": round(time.perf_counter() - refine_started, 3),
-            "infer_size": None,
-            "frames": None,
-            "reused": False,
-            "note": "backgroundremover CLI resizes to height 320 and squares to 320. No Python engine was importable.",
-        }
     _print_timings(state)
 
 
@@ -341,6 +399,103 @@ def fit_matte(cut: Path, matte: Path, state: dict) -> None:
     fitted.replace(matte)
 
 
+def place_moments_matte(pieces: Path, dest: Path, segments: list[dict], info: dict) -> None:
+    """Lay the short matte back onto a black full-length frame."""
+    width = int(info["width"])
+    height = int(info["height"])
+    fps = int(round(float(info.get("fps") or 30)))
+    duration = float(info["duration"])
+    parts = [f"color=c=black:s={width}x{height}:r={fps}:d={duration:.3f},format=gray[base]"]
+    cursor = 0.0
+    current = "[base]"
+    for index, segment in enumerate(segments):
+        length = float(segment["end"]) - float(segment["start"])
+        start = float(segment["start"])
+        parts.append(
+            f"[0:v]trim=start={cursor:.3f}:end={cursor + length:.3f},setpts=PTS-STARTPTS,"
+            f"scale={width}:{height},format=gray,setpts=PTS+{start:.3f}/TB[m{index}]"
+        )
+        parts.append(f"{current}[m{index}]overlay=eof_action=pass:repeatlast=0[b{index}]")
+        current = f"[b{index}]"
+        cursor += length
+    graph = ";".join(parts)
+    run_cmd(
+        [
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(pieces),
+            "-filter_complex",
+            graph,
+            "-map",
+            current,
+            "-an",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "18",
+            "-pix_fmt",
+            "yuv420p",
+            "-t",
+            f"{duration:.3f}",
+            str(dest),
+        ]
+    )
+
+
+def composite_partial(
+    cut: Path,
+    background: Path,
+    matte: Path,
+    segments: list[dict],
+    dest: Path,
+    width: int,
+    height: int,
+    fps: int,
+    duration: float,
+    crf: int,
+    audio_bitrate: str,
+) -> None:
+    """Original picture outside the moments. New plate behind the person inside them."""
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    image = background.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"}
+    cmd = ["ffmpeg", "-y", "-i", str(cut)]
+    if image:
+        cmd += ["-loop", "1", "-i", str(background)]
+    else:
+        cmd += ["-stream_loop", "-1", "-i", str(background)]
+    cmd += [
+        "-i",
+        str(matte),
+        "-filter_complex",
+        partial_composite_graph(segments, width, height, fps, duration),
+        "-map",
+        "[v]",
+        "-map",
+        "0:a?",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-crf",
+        str(crf),
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-b:a",
+        audio_bitrate,
+        "-t",
+        f"{duration:.3f}",
+        "-movflags",
+        "+faststart",
+        str(dest),
+    ]
+    run_cmd(cmd)
+
+
 def infer_matte(src: Path, dest: Path, state: dict) -> None:
     """Run the selected engine at `infer_size` (short side, aspect kept)."""
     import numpy as np
@@ -390,10 +545,33 @@ def infer_matte(src: Path, dest: Path, state: dict) -> None:
     except UGCError:
         raise
     except Exception as exc:
-        raise UGCError(
-            f"Background model {state.get('engine_used')} failed ({exc}). Try --bg-engine u2net.",
-            f"Falló el modelo {state.get('engine_used')} ({exc}). Prueba --bg-engine u2net.",
-        ) from exc
+        if getattr(device, "type", "") != "mps":
+            raise UGCError(
+                f"Background model {state.get('engine_used')} failed ({exc}). Try --bg-engine u2net.",
+                f"Falló el modelo {state.get('engine_used')} ({exc}). Prueba --bg-engine u2net.",
+            ) from exc
+        import traceback
+
+        log_path.write_text(traceback.format_exc(), encoding="utf-8")
+        cpu_estimate = estimate_bg_seconds(
+            state.get("engine_used") or "birefnet",
+            len(frames),
+            "cpu",
+            int(state.get("infer_size") or 320),
+        )
+        detail = f"{type(exc).__name__}: {exc}"
+        print(f"bg: MPS crashed ({detail}). The full error is in {log_path}.")
+        if mps_crash_action(cpu_estimate, bool(state.get("cost_approved"))) == "checkpoint":
+            shown = 0 if cpu_estimate is None else cpu_estimate
+            raise BgCostCheckpoint(
+                f"Apple's GPU crashed ({detail}). Continuing on CPU would take about {shown:.0f}s. "
+                f"See {log_path}. Background removal stopped.",
+                f"La GPU de Apple falló ({detail}). Seguir en CPU tardaría unos {shown:.0f}s. "
+                f"Mira {log_path}. El recorte de fondo se detuvo.",
+            ) from exc
+        print("bg: continuing BiRefNet on CPU.")
+        device = __import__("torch").device("cpu")
+        masks = predict_masks(frames, state.get("engine_used") or "u2net", state.get("model") or "u2net", device)
     infer_s = round(time.perf_counter() - started, 3)
     smooth_started = time.perf_counter()
     volume = np.stack(masks, axis=0)
@@ -684,6 +862,7 @@ def _matte_key(cut: Path, state: dict) -> str:
         "morph_close": state.get("morph_close"),
         "feather": state.get("feather"),
         "refine": bool(state.get("refine")),
+        "segments": state.get("segments") or [],
     }
     return "|".join(f"{key}={fields[key]}" for key in sorted(fields))
 
@@ -731,6 +910,21 @@ def _composite(cut: Path, workdir: Path, state: dict, width: int, height: int, f
     subject = ensure_subject(cut, workdir, state)
     info = probe(cut)
     dest = workdir / ("cut-bg-preview.mp4" if preview else "cut-bg.mp4")
+    if state.get("segments"):
+        composite_partial(
+            cut,
+            _plate(cut, workdir, state, width, height, preview),
+            workdir / "matte.mp4",
+            state["segments"],
+            dest,
+            width,
+            height,
+            fps,
+            float(info["duration"]),
+            crf,
+            audio_bitrate,
+        )
+        return dest
     composite_subject(
         subject,
         _plate(cut, workdir, state, width, height, preview),
@@ -801,6 +995,8 @@ def _engine_label(state: dict) -> str:
         return f"engine: u2net\nmodel: {state.get('model') or 'u2net'}"
     if engine == "ben2":
         return "engine: ben2\nweights: PramaLLC/BEN2"
+    if engine == "apple-vision":
+        return "engine: apple-vision\nweights: macOS Vision person segmentation"
     return "engine: birefnet\nweights: ZhengPeng7/BiRefNet_lite"
 
 

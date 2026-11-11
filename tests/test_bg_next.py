@@ -5,11 +5,14 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import os
 import shutil
 import subprocess
 import sys
 import time
 from pathlib import Path
+
+os.environ["UGC_SKIP_BG_INSTALL"] = "1"
 
 import pytest
 

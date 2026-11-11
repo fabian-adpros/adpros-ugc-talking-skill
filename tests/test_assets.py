@@ -48,7 +48,7 @@ def test_public_skill_id():
     end = text.find("\n---", 4)
     block = text[4:end]
     assert "name: adpros-ugc-talking-skill" in block.splitlines()
-    assert 'version: "0.3.0"' in block
+    assert 'version: "0.3.1"' in block
 
 
 def test_technical_demos_are_present():

@@ -16,7 +16,7 @@ Public id: `adpros-ugc-talking-skill`. In Claude Code, invoke `/adpros-ugc-talki
 Un solo pedido. Tú pasas el clip y Claude sigue `SKILL.md`:
 
 1. Transcribe con marcas de tiempo por palabra (WhisperX si está instalado, si no faster-whisper). Sale `words.json` y un SRT.
-2. Quita silencios de más de 0,4 s, dejando 0,05 s de aire a cada lado del corte.
+2. Quita silencios de más de 0,4 s, dejando 0,12 s de aire a cada lado del corte.
 3. Quita muletillas con listas en inglés y en español. El modo por defecto es conservador.
 4. Propone un gancho en el idioma del clip y espera tu ok.
 5. Renderiza en 1080×1920 con Remotion, o con FFmpeg si Remotion no está.
@@ -129,7 +129,7 @@ El preset de ejemplo es [`skills/adpros-ugc-talking-skill/assets/preset.json`](s
 | Clave | Default | Qué cambia |
 | --- | --- | --- |
 | `silence.min_seconds` | 0.4 | Solo se cortan silencios más largos que esto |
-| `silence.padding_seconds` | 0.05 | Aire que se conserva a cada lado del corte |
+| `silence.padding_seconds` | 0.12 | Aire que se conserva a cada lado del corte |
 | `silence.engine` | `auto` | `auto-editor`, `words`, o `auto` (auto-editor y si falla, palabras) |
 | `silence.audio_threshold` | 0.04 | Umbral de auto-editor (`audio:threshold=`) |
 | `fillers.mode` | `conservative` | `aggressive` quita más frases. Ver `assets/fillers.json` |
@@ -219,7 +219,7 @@ flowchart TD
 - El lugar de los subtítulos, el gancho en libass y el candado de sincronía se probaron con ffmpeg en Linux. No se volvieron a correr en macOS.
 - `captions.y_ratio` es fijo. En un reveal el subtítulo puede tapar el producto. No hay seguimiento del objeto.
 - El skill no traduce. Un clip en español sale en español.
-- En un clip real de 11 s, BiRefNet_lite (lado corto 320, CPU) dejó sólidos la camiseta negra, la caja negra y la mano. Hubo una filtración breve cerca de los 5,0 s al levantar el producto. Unos 1,05 s por cuadro, cerca de 6 minutos para 331 cuadros. El CLI de U2-Net tardó unos 72 s. MPS en Apple Silicon no se midió. El maestro con alfa no lleva los subtítulos quemados; van en el MP4 y en el SRT.
+- En un clip real de 11 s, BiRefNet_lite (lado corto 320, CPU) dejó sólidos la camiseta negra, la caja negra y la mano. Hubo una filtración breve cerca de los 5,0 s al levantar el producto. Unos 1,05 s por cuadro, cerca de 6 minutos para 331 cuadros. En un Mac, la GPU falló y BiRefNet siguió en CPU a unos 1,6 s por cuadro (1.270 cuadros, unos 34 minutos). El recorte de persona del Mac, en ese mismo clip, hizo 30 cuadros en 7 s (unos 0,24 s por cuadro, cerca de 5 minutos el clip entero): cara, pelo y manos bien; el borde de la camiseta un poco más tosco. Solo separa personas. El CLI de U2-Net tardó unos 72 s en el clip de 11 s.
 - Cada comando imprime `next_steps` en el idioma del clip (inglés o español) y lo guarda en `plan.json`.
 
 ### Roadmap (fase 2)
@@ -279,7 +279,7 @@ El zip de `dist/` es el que se sube a claude.ai. `dist/` no se commitea. Un tag 
 One request. You hand over the clip and Claude follows `SKILL.md`:
 
 1. Transcribe with word timestamps (WhisperX if it is installed, otherwise faster-whisper). You get `words.json` and an SRT.
-2. Cut silences longer than 0.4s, leaving 0.05s of padding on each side.
+2. Cut silences longer than 0.4s, leaving 0.12s of padding on each side.
 3. Cut filler words with English and Spanish lists. The default mode is conservative.
 4. Propose a hook in the clip's language and wait for a yes.
 5. Render 1080×1920 with Remotion, or with FFmpeg when Remotion is not there.
@@ -392,7 +392,7 @@ The sample preset is [`skills/adpros-ugc-talking-skill/assets/preset.json`](skil
 | Key | Default | Effect |
 | --- | --- | --- |
 | `silence.min_seconds` | 0.4 | Only silences longer than this are cut |
-| `silence.padding_seconds` | 0.05 | Audio kept on each side of a cut |
+| `silence.padding_seconds` | 0.12 | Audio kept on each side of a cut |
 | `silence.engine` | `auto` | `auto-editor`, `words`, or `auto` (auto-editor, then word gaps) |
 | `silence.audio_threshold` | 0.04 | auto-editor threshold (`audio:threshold=`) |
 | `fillers.mode` | `conservative` | `aggressive` removes more phrases. See `assets/fillers.json` |
@@ -482,7 +482,7 @@ Run `./doctor.sh` first. A quiet first transcription is the model download. Exit
 - Caption placement, the libass hook, and the sync lock were checked with ffmpeg on Linux. They were not run again on macOS.
 - `captions.y_ratio` is a fixed line. During a product reveal the captions can cover the product. There is no object tracking.
 - The skill does not translate. A Spanish clip stays in Spanish.
-- On a real 11 s clip, BiRefNet_lite (short side 320, CPU) kept a black shirt, a black product box, and a waving hand. There was a brief leak around 5.0 s during a lift. About 1.05 s/frame, about 6 minutes for 331 frames. The U2-Net CLI took about 72 s. Apple Silicon MPS was not timed. The alpha master does not have burned-in captions; those are on the MP4 and in the SRT.
+- On a real 11 s clip, BiRefNet_lite (short side 320, CPU) kept a black shirt, a black product box, and a waving hand. There was a brief leak around 5.0 s during a lift. About 1.05 s/frame, about 6 minutes for 331 frames. On a Mac, the GPU path crashed and BiRefNet continued on the CPU at about 1.6 s/frame (1,270 frames, about 34 minutes). The Mac's built-in person cutout, on that same clip, did 30 frames in 7 s (about 0.24 s/frame, about 5 minutes for the whole clip): face, hair, and hands held; the shirt edge was a little rougher. It segments people only. The U2-Net CLI took about 72 s on the 11 s clip.
 - Every command prints `next_steps` in the clip language (English or Spanish) and stores the list on `plan.json`.
 
 ### Roadmap (phase 2)
