@@ -88,3 +88,4 @@ def test_background_install_does_not_start_unless_a_background_was_asked_for():
     assert needs_bg_install(True, "birefnet", True, False, False) is False
     assert needs_bg_install(True, "u2net", False, False, True) is False
     assert needs_bg_install(True, "u2net", False, False, False) is True
+    assert needs_bg_install(True, "apple-vision", False, False, False) is False

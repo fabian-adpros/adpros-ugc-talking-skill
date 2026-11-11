@@ -219,7 +219,7 @@ flowchart TD
 - El lugar de los subtítulos, el gancho en libass y el candado de sincronía se probaron con ffmpeg en Linux. No se volvieron a correr en macOS.
 - `captions.y_ratio` es fijo. En un reveal el subtítulo puede tapar el producto. No hay seguimiento del objeto.
 - El skill no traduce. Un clip en español sale en español.
-- En un clip real de 11 s, BiRefNet_lite (lado corto 320, CPU) dejó sólidos la camiseta negra, la caja negra y la mano. Hubo una filtración breve cerca de los 5,0 s al levantar el producto. Unos 1,05 s por cuadro, cerca de 6 minutos para 331 cuadros. El CLI de U2-Net tardó unos 72 s. MPS en Apple Silicon no se midió. El maestro con alfa no lleva los subtítulos quemados; van en el MP4 y en el SRT.
+- En un clip real de 11 s, BiRefNet_lite (lado corto 320, CPU) dejó sólidos la camiseta negra, la caja negra y la mano. Hubo una filtración breve cerca de los 5,0 s al levantar el producto. Unos 1,05 s por cuadro, cerca de 6 minutos para 331 cuadros. En un Mac, la GPU falló y BiRefNet siguió en CPU a unos 1,6 s por cuadro (1.270 cuadros, unos 34 minutos). El recorte de persona del Mac, en ese mismo clip, hizo 30 cuadros en 7 s (unos 0,24 s por cuadro, cerca de 5 minutos el clip entero): cara, pelo y manos bien; el borde de la camiseta un poco más tosco. Solo separa personas. El CLI de U2-Net tardó unos 72 s en el clip de 11 s.
 - Cada comando imprime `next_steps` en el idioma del clip (inglés o español) y lo guarda en `plan.json`.
 
 ### Roadmap (fase 2)
@@ -482,7 +482,7 @@ Run `./doctor.sh` first. A quiet first transcription is the model download. Exit
 - Caption placement, the libass hook, and the sync lock were checked with ffmpeg on Linux. They were not run again on macOS.
 - `captions.y_ratio` is a fixed line. During a product reveal the captions can cover the product. There is no object tracking.
 - The skill does not translate. A Spanish clip stays in Spanish.
-- On a real 11 s clip, BiRefNet_lite (short side 320, CPU) kept a black shirt, a black product box, and a waving hand. There was a brief leak around 5.0 s during a lift. About 1.05 s/frame, about 6 minutes for 331 frames. The U2-Net CLI took about 72 s. Apple Silicon MPS was not timed. The alpha master does not have burned-in captions; those are on the MP4 and in the SRT.
+- On a real 11 s clip, BiRefNet_lite (short side 320, CPU) kept a black shirt, a black product box, and a waving hand. There was a brief leak around 5.0 s during a lift. About 1.05 s/frame, about 6 minutes for 331 frames. On a Mac, the GPU path crashed and BiRefNet continued on the CPU at about 1.6 s/frame (1,270 frames, about 34 minutes). The Mac's built-in person cutout, on that same clip, did 30 frames in 7 s (about 0.24 s/frame, about 5 minutes for the whole clip): face, hair, and hands held; the shirt edge was a little rougher. It segments people only. The U2-Net CLI took about 72 s on the 11 s clip.
 - Every command prints `next_steps` in the clip language (English or Spanish) and stores the list on `plan.json`.
 
 ### Roadmap (phase 2)

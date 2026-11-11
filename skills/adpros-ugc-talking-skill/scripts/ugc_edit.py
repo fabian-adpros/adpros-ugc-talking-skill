@@ -39,6 +39,7 @@ from lib.media import (  # noqa: E402
 from lib.bg import (  # noqa: E402
     AWAITING_BG,
     AWAITING_BG_COST,
+    BgCostCheckpoint,
     backgroundremover_available,
     bg_checkpoint_message,
     build_preview,
@@ -52,6 +53,7 @@ from lib.engine import (  # noqa: E402
     device_name,
     estimate_bg_seconds,
 )
+from lib.moments import moment_seconds  # noqa: E402
 from lib.delivery import (  # noqa: E402
     AWAITING_DELIVERY,
     AWAITING_STORYBOARD,
@@ -372,7 +374,7 @@ _BG_INSTALLS: dict[str, subprocess.Popen] = {}
 
 def needs_bg_install(requested: bool, engine: str, have_birefnet: bool, have_ben2: bool, have_u2net_cli: bool) -> bool:
     """Torch is installed only when a background was asked for and that engine is missing."""
-    if not requested:
+    if not requested or engine == "apple-vision":
         return False
     if engine == "ben2":
         return not have_ben2
@@ -465,8 +467,13 @@ def _guard_speech(source: Path, workdir: Path, plan: dict) -> None:
 def _stop_for_bg_cost(args, ui: str, workdir: Path, plan: dict, state: dict, cut: Path) -> bool:
     approved = bool(getattr(args, "bg_go", False) or getattr(args, "yes", False) or state.get("cost_approved"))
     info = probe(cut)
-    frames = max(1, int(round(float(info["duration"]) * float(info.get("fps") or 30))))
+    fps = float(info.get("fps") or 30)
+    if state.get("segments"):
+        frames = max(1, int(round(moment_seconds(state["segments"], float(info["duration"])) * fps)))
+    else:
+        frames = max(1, int(round(float(info["duration"]) * fps)))
     device = device_name()
+    plan["suggest_apple_vision"] = _suggest_apple_vision(workdir)
     engine = state.get("engine_used") or state.get("engine") or "birefnet"
     estimate = estimate_bg_seconds(engine, frames, device, int(state.get("infer_size") or 320))
     shown = "unmeasured" if estimate is None else f"{estimate:.0f}s"
@@ -494,6 +501,55 @@ def _stop_for_bg_cost(args, ui: str, workdir: Path, plan: dict, state: dict, cut
         )
     _follow("bg_cost", ui, plan, workdir)
     return True
+
+
+def _suggest_apple_vision(workdir: Path) -> bool:
+    import platform
+
+    if platform.system() != "Darwin":
+        return False
+    path = workdir / "export" / "storyboard.json"
+    if not path.exists():
+        return True
+    labels = set()
+    for scene in load_json(path).get("scenes") or []:
+        if scene.get("label"):
+            labels.add(scene["label"])
+    return not ({"product_visible", "product_reveal"} & labels)
+
+
+def _apply_background(ui: str, workdir: Path, plan: dict, state: dict, cut: Path, export: dict):
+    width = int(export["width"])
+    height = int(export["height"])
+    fps = int(export["fps"])
+    if not state["approved"]:
+        frames = build_preview(
+            cut,
+            workdir,
+            state,
+            width,
+            height,
+            fps,
+            int(export["crf"]),
+            export["audio_bitrate"],
+        )
+        state["previews"] = frames
+        state["approved"] = False
+        plan["bg"] = state
+        print(bg_checkpoint_message(ui, frames, state))
+        _follow("bg", ui, plan, workdir)
+        return {"awaiting": AWAITING_BG, "renderer": None}
+    state["approved"] = True
+    return prepare_picture(
+        cut,
+        workdir,
+        state,
+        width,
+        height,
+        fps,
+        int(export["crf"]),
+        export["audio_bitrate"],
+    )
 
 
 def _follow(stage: str, ui: str, plan: dict | None, workdir: Path | None, error: str | None = None) -> None:
@@ -527,37 +583,17 @@ def _do_render(args: argparse.Namespace, preset: dict, workdir: Path, plan: dict
         _wait_bg_install(workdir)
         if _stop_for_bg_cost(args, ui, workdir, plan, state, cut):
             return {"awaiting": AWAITING_BG_COST, "renderer": None}
-        width = int(export["width"])
-        height = int(export["height"])
-        fps = int(export["fps"])
-        if not state["approved"]:
-            frames = build_preview(
-                cut,
-                workdir,
-                state,
-                width,
-                height,
-                fps,
-                int(export["crf"]),
-                export["audio_bitrate"],
-            )
-            state["previews"] = frames
-            state["approved"] = False
+        try:
+            outcome = _apply_background(ui, workdir, plan, state, cut, export)
+        except BgCostCheckpoint as stopped:
             plan["bg"] = state
-            print(bg_checkpoint_message(ui, frames, state))
-            _follow("bg", ui, plan, workdir)
-            return {"awaiting": AWAITING_BG, "renderer": None}
-        picture = prepare_picture(
-            cut,
-            workdir,
-            state,
-            width,
-            height,
-            fps,
-            int(export["crf"]),
-            export["audio_bitrate"],
-        )
-        state["approved"] = True
+            plan["suggest_apple_vision"] = _suggest_apple_vision(workdir)
+            print(stopped.es if ui == "es" else stopped.en)
+            _follow("bg_cost", ui, plan, workdir)
+            return {"awaiting": AWAITING_BG_COST, "renderer": None}
+        if isinstance(outcome, dict):
+            return outcome
+        picture = outcome
     plan["bg"] = state
     dump_json(workdir / "plan.json", plan)
     music = _resolve_music(preset, args.music)
@@ -797,6 +833,7 @@ def build_parser() -> argparse.ArgumentParser:
             bg_engine=None,
             bg_refine=False,
             bg_go=False,
+            bg_moments=None,
         )
     storyboard = sub.add_parser("storyboard")
     storyboard.add_argument("--workdir", required=True)
@@ -816,7 +853,8 @@ def _add_bg_flags(target: argparse.ArgumentParser) -> None:
     target.add_argument("--bg-threshold", type=int, default=None, help="Matte luma cutoff, 0-255.")
     target.add_argument("--bg-yes", action="store_true", help="Approve the background preview.")
     target.add_argument("--bg-skip", action="store_true", help="Keep the original background.")
-    target.add_argument("--bg-engine", default=None, choices=["birefnet", "ben2", "u2net"])
+    target.add_argument("--bg-engine", default=None, choices=["birefnet", "ben2", "u2net", "apple-vision"])
+    target.add_argument("--bg-moments", default=None, help="Cut-timeline ranges, for example 0-3,12-15,20-23.")
     target.add_argument("--bg-infer-size", type=int, default=None, help="Short side passed to the model. Default 320.")
     target.add_argument("--bg-smooth", type=int, default=None, help="Temporal median window, 0–5. Default 3.")
     target.add_argument("--bg-feather", type=int, default=None, help="Alpha blur radius, used only with --bg-refine.")

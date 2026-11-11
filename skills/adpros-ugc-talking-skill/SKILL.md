@@ -105,6 +105,24 @@ Exit 13 is the background checkpoint, not a failure. The command writes 3–5 si
 
 Do not run `./install.sh --with-bg` unless the user asked for a new background. When they pass `--bg` and the engine is missing, the script starts that install itself, in the background, while transcription and the cut continue. The first install is about 1 GB and often several minutes.
 
+If BiRefNet is started on Apple's GPU and that path crashes, the full error is written to `bg-infer.log`. The model is loaded in fp32 and `PYTORCH_ENABLE_MPS_FALLBACK=1` is set before the attempt. After a crash the script does not quietly switch to a long CPU run: if that CPU estimate is over about 3 minutes it stops (exit 14) and offers the same choices, including the Mac person cutout when there is no product in the storyboard. This crash path was not re-run on a Mac here.
+
+`apple-vision` uses the Mac's built-in person segmentation. On one Mac clip, 30 frames took 7 seconds (about 0.24 s/frame), and 1,270 frames would be about 5 minutes. Face, hair, and hands held. The shirt edge on the left shoulder was a little rougher than BiRefNet. It segments people only, so recommend it for a talking head with no product, and BiRefNet when a product is in the hand. It cannot be tested on Linux.
+
+`--bg-moments 0-3,12-15,20-23` changes the background only in those stretches. Propose 3 or 4 of them from the transcript at the storyboard step: the hook, one contrast, the close. The original room stays everywhere else.
+
+## Which model should run which step
+
+Say this once, at the start of the stage, in the user's language. Do not repeat it on later messages of the same stage.
+
+Mechanical steps (install, transcription, the cut, a background batch, turning masks into video, a re-render whose settings are already chosen, export): a lighter model is enough. In Claude Code, `/model sonnet` or `/model haiku` applies on the next message. The conversation stays.
+
+Judgement steps (the hook, the storyboard, where to zoom, which moments get a new background, sound effects, when a pop-up appears, reviewing the final picture): use the top model. In Claude Code, `/model opus` applies on the next message. The conversation stays.
+
+Pasos mecánicos (instalación, transcripción, el corte, el lote de fondo, convertir máscaras en video, un re-render con ajustes ya decididos, exportar): basta un modelo más ligero. En Claude Code, `/model sonnet` o `/model haiku` vale en el siguiente mensaje. La conversación sigue.
+
+Pasos de criterio (el gancho, el storyboard, dónde hacer zoom, qué momentos cambian de fondo, efectos de sonido, cuándo sale un texto, revisar la imagen final): usa el modelo de arriba. En Claude Code, `/model opus` vale en el siguiente mensaje. La conversación sigue.
+
 The matte is scaled to the cut before it is composited. A temporal median (`bg.temporal_smooth`, default 3) and a small close run on the alpha. The guided filter is not used: it copied the picture into the mask. `--bg-refine` only blurs the alpha, and it is off unless you pass it. A cut that is unchanged is not encoded again, so approving the preview does not run the model a second time.
 
 On a real 11 s clip, BiRefNet_lite kept a black shirt, a black product box, and a waving hand. A brief leak around 5.0 s during a lift can still happen. If the product still flickers, Grounded-SAM-2 is the next step and is not in this version. The alpha master does not have captions burned in. Captions are on the MP4 and in the SRT files.
