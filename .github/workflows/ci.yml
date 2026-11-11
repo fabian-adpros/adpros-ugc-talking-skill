@@ -8,6 +8,7 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -22,7 +23,16 @@ jobs:
           cache-dependency-path: skills/adpros-ugc-talking-skill/template/package-lock.json
 
       - name: Install ffmpeg
-        run: sudo apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y ffmpeg libxml2-utils
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if timeout 120 sudo apt-get update && timeout 180 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y ffmpeg libxml2-utils; then
+              exit 0
+            fi
+            echo "apt attempt ${attempt} failed; retrying"
+            sleep 10
+          done
+          exit 1
 
       - name: Unit tests
         run: |
