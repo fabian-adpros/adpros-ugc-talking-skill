@@ -1,6 +1,6 @@
 # Silence
 
-Default: remove silences **strictly longer than 0.4s**, and keep **0.05s of padding** on each side of the cut so the edit does not clip the word.
+Default: remove silences **strictly longer than 0.4s**, and keep **0.12s of padding** on each side of the cut so the edit does not clip the word. Each join also fades for 15ms. If a measured cut point still has speech energy, the pad widens before the encode.
 
 `assets/preset.json` keys: `silence.min_seconds`, `silence.padding_seconds`, `silence.engine` (`auto`, `auto-editor`, or `words`).
 
@@ -10,7 +10,7 @@ Default: remove silences **strictly longer than 0.4s**, and keep **0.05s of padd
 
 auto-editor 29.3.1 has no minimum-cut flag. `--smooth` is rejected (`Unknown option`). The script therefore:
 
-1. Runs the verified command in [commands.md](commands.md) with `--margin` set to the padding (0.05s) and `--frame-rate` set to `silence.analysis_fps` (100, so the margin lands on a 10 ms grid).
+1. Runs the verified command in [commands.md](commands.md) with `--margin` set to `silence.padding_seconds` (0.12s) and `--frame-rate` set to `silence.analysis_fps` (100, so the margin lands on a 10 ms grid).
 2. Reads the `.v1` timeline. A chunk whose speed is `99999` is a cut. Speed `1` is kept.
 3. Adds the margin back to estimate the original silence (one margin on a leading or trailing cut, two margins in the middle). The cut is kept only when that estimate is **greater than** 0.4s. A 0.2s hole stays.
 

@@ -16,7 +16,7 @@ Public id: `adpros-ugc-talking-skill`. In Claude Code, invoke `/adpros-ugc-talki
 Un solo pedido. Tú pasas el clip y Claude sigue `SKILL.md`:
 
 1. Transcribe con marcas de tiempo por palabra (WhisperX si está instalado, si no faster-whisper). Sale `words.json` y un SRT.
-2. Quita silencios de más de 0,4 s, dejando 0,05 s de aire a cada lado del corte.
+2. Quita silencios de más de 0,4 s, dejando 0,12 s de aire a cada lado del corte.
 3. Quita muletillas con listas en inglés y en español. El modo por defecto es conservador.
 4. Propone un gancho en el idioma del clip y espera tu ok.
 5. Renderiza en 1080×1920 con Remotion, o con FFmpeg si Remotion no está.
@@ -129,7 +129,7 @@ El preset de ejemplo es [`skills/adpros-ugc-talking-skill/assets/preset.json`](s
 | Clave | Default | Qué cambia |
 | --- | --- | --- |
 | `silence.min_seconds` | 0.4 | Solo se cortan silencios más largos que esto |
-| `silence.padding_seconds` | 0.05 | Aire que se conserva a cada lado del corte |
+| `silence.padding_seconds` | 0.12 | Aire que se conserva a cada lado del corte |
 | `silence.engine` | `auto` | `auto-editor`, `words`, o `auto` (auto-editor y si falla, palabras) |
 | `silence.audio_threshold` | 0.04 | Umbral de auto-editor (`audio:threshold=`) |
 | `fillers.mode` | `conservative` | `aggressive` quita más frases. Ver `assets/fillers.json` |
@@ -279,7 +279,7 @@ El zip de `dist/` es el que se sube a claude.ai. `dist/` no se commitea. Un tag 
 One request. You hand over the clip and Claude follows `SKILL.md`:
 
 1. Transcribe with word timestamps (WhisperX if it is installed, otherwise faster-whisper). You get `words.json` and an SRT.
-2. Cut silences longer than 0.4s, leaving 0.05s of padding on each side.
+2. Cut silences longer than 0.4s, leaving 0.12s of padding on each side.
 3. Cut filler words with English and Spanish lists. The default mode is conservative.
 4. Propose a hook in the clip's language and wait for a yes.
 5. Render 1080×1920 with Remotion, or with FFmpeg when Remotion is not there.
@@ -392,7 +392,7 @@ The sample preset is [`skills/adpros-ugc-talking-skill/assets/preset.json`](skil
 | Key | Default | Effect |
 | --- | --- | --- |
 | `silence.min_seconds` | 0.4 | Only silences longer than this are cut |
-| `silence.padding_seconds` | 0.05 | Audio kept on each side of a cut |
+| `silence.padding_seconds` | 0.12 | Audio kept on each side of a cut |
 | `silence.engine` | `auto` | `auto-editor`, `words`, or `auto` (auto-editor, then word gaps) |
 | `silence.audio_threshold` | 0.04 | auto-editor threshold (`audio:threshold=`) |
 | `fillers.mode` | `conservative` | `aggressive` removes more phrases. See `assets/fillers.json` |

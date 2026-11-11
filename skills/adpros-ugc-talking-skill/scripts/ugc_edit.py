@@ -9,6 +9,8 @@
 from __future__ import annotations
 
 import argparse
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -36,13 +38,20 @@ from lib.media import (  # noqa: E402
 )
 from lib.bg import (  # noqa: E402
     AWAITING_BG,
+    AWAITING_BG_COST,
     backgroundremover_available,
     bg_checkpoint_message,
     build_preview,
     prepare_picture,
     resolve_bg,
 )
-from lib.engine import ben2_available, birefnet_available  # noqa: E402
+from lib.engine import (  # noqa: E402
+    ben2_available,
+    bg_cost_should_stop,
+    birefnet_available,
+    device_name,
+    estimate_bg_seconds,
+)
 from lib.delivery import (  # noqa: E402
     AWAITING_DELIVERY,
     AWAITING_STORYBOARD,
@@ -53,6 +62,7 @@ from lib.delivery import (  # noqa: E402
 from lib.nextsteps import print_next_steps  # noqa: E402
 from lib.nle import NLE_CHOICES, export_nle, otio_adapter, otio_available, otio_version  # noqa: E402
 from lib.render import cut_video, remotion_ready, render_styled  # noqa: E402
+from lib.speechpad import load_pcm16k, shift_plan_times, widen_ranges, window_db  # noqa: E402
 from lib.storyboard import write_storyboard  # noqa: E402
 from lib.transcribe import detect_device, transcribe, whisperx_bin  # noqa: E402
 from lib.util import UGCError, dump_json, load_json, prepend_tool_paths, round_time, skill_root  # noqa: E402
@@ -357,6 +367,135 @@ def _do_transcribe(args: argparse.Namespace, preset: dict, workdir: Path) -> dic
     )
 
 
+_BG_INSTALLS: dict[str, subprocess.Popen] = {}
+
+
+def needs_bg_install(requested: bool, engine: str, have_birefnet: bool, have_ben2: bool, have_u2net_cli: bool) -> bool:
+    """Torch is installed only when a background was asked for and that engine is missing."""
+    if not requested:
+        return False
+    if engine == "ben2":
+        return not have_ben2
+    if engine == "u2net":
+        return not have_u2net_cli
+    return not have_birefnet
+
+
+def background_requested(args, preset: dict) -> bool:
+    if bool(getattr(args, "bg_skip", False)):
+        return False
+    flag = getattr(args, "bg", None)
+    if flag not in (None, "keep"):
+        return True
+    return bool((preset.get("bg") or {}).get("enabled"))
+
+
+def _maybe_start_bg_install(args, preset: dict, workdir: Path) -> None:
+    if os.environ.get("UGC_SKIP_BG_INSTALL") == "1":
+        return
+    engine = getattr(args, "bg_engine", None) or (preset.get("bg") or {}).get("engine") or "birefnet"
+    if not needs_bg_install(
+        background_requested(args, preset),
+        engine,
+        birefnet_available(),
+        ben2_available(),
+        bool(backgroundremover_available()),
+    ):
+        return
+    key = str(workdir.resolve())
+    running = _BG_INSTALLS.get(key)
+    if running is not None and running.poll() is None:
+        return
+    install = skill_root() / "install.sh"
+    log_path = workdir / "bg-install.log"
+    log = log_path.open("w", encoding="utf-8")
+    proc = subprocess.Popen(
+        ["bash", str(install), "--with-bg"],
+        stdout=log,
+        stderr=subprocess.STDOUT,
+    )
+    _BG_INSTALLS[key] = proc
+    print(
+        "bg: installing PyTorch and BiRefNet in the background "
+        "(about 1 GB, often several minutes). Transcription and the cut keep going. "
+        f"Log: {log_path}"
+    )
+
+
+def _wait_bg_install(workdir: Path) -> None:
+    proc = _BG_INSTALLS.get(str(workdir.resolve()))
+    if proc is None:
+        return
+    if proc.poll() is None:
+        print("bg: the install is still running. Waiting before background removal.")
+        code = proc.wait()
+    else:
+        code = proc.returncode
+    if code not in (0, None):
+        raise UGCError(
+            f"Background install failed (exit {code}). See {workdir / 'bg-install.log'}.",
+            f"Falló la instalación del fondo (salida {code}). Mira {workdir / 'bg-install.log'}.",
+        )
+
+
+def _guard_speech(source: Path, workdir: Path, plan: dict) -> None:
+    samples, rate = load_pcm16k(source)
+    if not samples:
+        return
+    duration = len(samples) / float(rate)
+    words = []
+    words_path = workdir / "words.json"
+    if words_path.exists():
+        words = load_json(words_path).get("words") or []
+    old = [dict(item) for item in plan.get("kept_ranges") or []]
+    updated, notes = widen_ranges(
+        old,
+        lambda moment: window_db(samples, rate, moment),
+        words,
+        duration=duration,
+    )
+    if not notes:
+        return
+    shift_plan_times(plan, old, updated)
+    plan["kept_ranges"] = updated
+    plan["speech_pad"] = notes
+    print("Speech pad: " + "; ".join(notes))
+
+
+def _stop_for_bg_cost(args, ui: str, workdir: Path, plan: dict, state: dict, cut: Path) -> bool:
+    approved = bool(getattr(args, "bg_go", False) or getattr(args, "yes", False) or state.get("cost_approved"))
+    info = probe(cut)
+    frames = max(1, int(round(float(info["duration"]) * float(info.get("fps") or 30))))
+    device = device_name()
+    engine = state.get("engine_used") or state.get("engine") or "birefnet"
+    estimate = estimate_bg_seconds(engine, frames, device, int(state.get("infer_size") or 320))
+    shown = "unmeasured" if estimate is None else f"{estimate:.0f}s"
+    print(
+        f"bg: device={device} frames={frames} engine={engine} "
+        f"infer_size={state.get('infer_size')} estimate={shown}"
+    )
+    state["estimate_s"] = None if estimate is None else round(estimate, 1)
+    state["device"] = device
+    if not bg_cost_should_stop(device, estimate, approved):
+        state["cost_approved"] = True
+        return False
+    state["cost_approved"] = False
+    plan["bg"] = state
+    minutes = (estimate or 0) / 60.0
+    if ui == "es":
+        print(
+            f"exit: 14\nquestion: background-cost\n"
+            f"En CPU esto tardaría unos {minutes:.0f} minutos. No empecé el recorte."
+        )
+    else:
+        print(
+            f"exit: 14\nquestion: background-cost\n"
+            f"On CPU this would take about {minutes:.0f} minutes. Background removal has not started."
+        )
+    _follow("bg_cost", ui, plan, workdir)
+    return True
+
+
 def _follow(stage: str, ui: str, plan: dict | None, workdir: Path | None, error: str | None = None) -> None:
     print_next_steps(stage, ui, plan, error=error)
     if plan is not None and workdir is not None:
@@ -370,6 +509,7 @@ def _do_render(args: argparse.Namespace, preset: dict, workdir: Path, plan: dict
         dump_json(workdir / "plan.json", plan)
     source = Path(plan["source"])
     export = preset["export"]
+    _guard_speech(source, workdir, plan)
     cut = workdir / "cut.mp4"
     cut_video(
         source,
@@ -384,6 +524,9 @@ def _do_render(args: argparse.Namespace, preset: dict, workdir: Path, plan: dict
     state = resolve_bg(args, preset, plan)
     picture = cut
     if state["enabled"]:
+        _wait_bg_install(workdir)
+        if _stop_for_bg_cost(args, ui, workdir, plan, state, cut):
+            return {"awaiting": AWAITING_BG_COST, "renderer": None}
         width = int(export["width"])
         height = int(export["height"])
         fps = int(export["fps"])
@@ -653,6 +796,7 @@ def build_parser() -> argparse.ArgumentParser:
             bg_feather=None,
             bg_engine=None,
             bg_refine=False,
+            bg_go=False,
         )
     storyboard = sub.add_parser("storyboard")
     storyboard.add_argument("--workdir", required=True)
@@ -677,6 +821,7 @@ def _add_bg_flags(target: argparse.ArgumentParser) -> None:
     target.add_argument("--bg-smooth", type=int, default=None, help="Temporal median window, 0–5. Default 3.")
     target.add_argument("--bg-feather", type=int, default=None, help="Alpha blur radius, used only with --bg-refine.")
     target.add_argument("--bg-refine", action="store_true", help="Blur the alpha. Off by default. Does not use a guided filter.")
+    target.add_argument("--bg-go", action="store_true", help="Continue a background job even when the CPU estimate is long.")
 
 
 def _inline_flag(args: argparse.Namespace) -> bool | None:
@@ -744,6 +889,8 @@ def main(argv: list[str] | None = None) -> int:
         workdir = Path(args.workdir)
         workdir.mkdir(parents=True, exist_ok=True)
         preset = _preset_from_args(args)
+        if args.cmd in ("run", "render"):
+            _maybe_start_bg_install(args, preset, workdir)
         mode = args.mode or preset["fillers"]["mode"]
         silence_engine = args.silence_engine or preset["silence"]["engine"]
         start = getattr(args, "from_step", None) or "transcribe"

@@ -9,7 +9,8 @@ from .util import deep_merge, load_json, skill_root
 DEFAULTS: dict = {
     "silence": {
         "min_seconds": 0.4,
-        "padding_seconds": 0.05,
+        "padding_seconds": 0.12,
+        "fade_seconds": 0.015,
         "engine": "auto",
         "audio_threshold": 0.04,
         "analysis_fps": 100,

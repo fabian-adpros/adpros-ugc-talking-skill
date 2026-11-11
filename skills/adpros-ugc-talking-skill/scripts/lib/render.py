@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import platform
 import shutil
 import subprocess
 from pathlib import Path
@@ -30,6 +31,103 @@ def _scale_clause(width: int, height: int) -> str:
     )
 
 
+FADE_SECONDS = 0.015
+
+
+def intermediate_crf(requested: int) -> int:
+    """Never encode an intermediate slower or heavier than a normal fast cut.
+
+    A hand-rolled crf 14 / preset medium pass is what made a 42s re-cut take
+    more than 10 minutes. Values already at 18 or softer are left alone so a
+    test can still use a small fast file.
+    """
+    value = int(requested)
+    if value < 18:
+        return 18
+    return value
+
+
+def videotoolbox_available() -> bool:
+    if platform.system() != "Darwin" or not shutil.which("ffmpeg"):
+        return False
+    completed = subprocess.run(
+        ["ffmpeg", "-hide_banner", "-encoders"],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    return "h264_videotoolbox" in (completed.stdout or "")
+
+
+def intermediate_encoder_args(crf: int) -> list[str]:
+    if videotoolbox_available():
+        return ["-c:v", "h264_videotoolbox", "-b:v", "8M", "-allow_sw", "1"]
+    return ["-c:v", "libx264", "-preset", "veryfast", "-crf", str(intermediate_crf(crf)), "-pix_fmt", "yuv420p"]
+
+
+def build_cut_command(
+    src: Path,
+    dest: Path,
+    ranges: list[dict],
+    width: int,
+    height: int,
+    fps: int,
+    crf: int,
+    audio_bitrate: str,
+    fade_seconds: float = FADE_SECONDS,
+) -> list[str]:
+    """One ffmpeg process, one decode of `src`, every kept range in one graph."""
+    scale = _scale_clause(width, height)
+    audio_format = audio_format_clause()
+    parts: list[str] = []
+    labels: list[str] = []
+    for index, block in enumerate(ranges):
+        start = float(block["src_start"])
+        end = float(block["src_end"])
+        _frames, exact = segment_frames(start, end, fps)
+        exact_text = f"{exact:.6f}"
+        fade = min(float(fade_seconds), exact / 4.0) if exact > 0.02 else 0.0
+        fade_out = max(0.0, exact - fade)
+        audio = (
+            f"[0:a]atrim=start={start:.6f}:end={end:.6f},asetpts=PTS-STARTPTS,"
+            f"aresample=48000,{audio_format},apad=whole_dur={exact_text},"
+            f"atrim=duration={exact_text},asetpts=PTS-STARTPTS"
+        )
+        if fade > 0.004:
+            audio += f",afade=t=in:st=0:d={fade:.4f},afade=t=out:st={fade_out:.4f}:d={fade:.4f}"
+        audio += f"[a{index}]"
+        parts.append(
+            f"[0:v]trim=start={start:.6f}:end={end:.6f},setpts=PTS-STARTPTS,{scale},"
+            f"fps={fps}:round=near,tpad=stop_mode=clone:stop_duration=1,"
+            f"trim=duration={exact_text},setpts=PTS-STARTPTS,format=yuv420p[v{index}]"
+        )
+        parts.append(audio)
+        labels.append(f"[v{index}][a{index}]")
+    parts.append(f"{''.join(labels)}concat=n={len(ranges)}:v=1:a=1[v][a]")
+    return [
+        "ffmpeg",
+        "-y",
+        "-fflags",
+        "+genpts",
+        "-i",
+        str(src),
+        "-filter_complex",
+        ";".join(parts),
+        "-map",
+        "[v]",
+        "-map",
+        "[a]",
+        *intermediate_encoder_args(crf),
+        "-c:a",
+        "aac",
+        "-b:a",
+        audio_bitrate,
+        "-movflags",
+        "+faststart",
+        str(dest),
+    ]
+
+
 def cut_inputs_key(
     src: Path,
     ranges: list[dict],
@@ -50,8 +148,10 @@ def cut_inputs_key(
         "width": int(width),
         "height": int(height),
         "fps": int(fps),
-        "crf": int(crf),
+        "crf": intermediate_crf(crf),
         "audio": str(audio_bitrate),
+        "fade": FADE_SECONDS,
+        "encoder": "h264_videotoolbox" if videotoolbox_available() else "libx264",
     }
     encoded = json.dumps(payload, sort_keys=True, default=str, ensure_ascii=False)
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
@@ -81,60 +181,8 @@ def cut_video(
     stamp = cut_stamp_path(dest)
     if dest.exists() and dest.stat().st_size > 0 and stamp.exists() and stamp.read_text(encoding="utf-8").strip() == key:
         return
-    scale = _scale_clause(width, height)
-    audio_format = audio_format_clause()
-    parts: list[str] = []
-    labels: list[str] = []
-    for index, block in enumerate(ranges):
-        start = float(block["src_start"])
-        end = float(block["src_end"])
-        _frames, exact = segment_frames(start, end, fps)
-        exact_text = f"{exact:.6f}"
-        # Video and audio are each forced to the same frame-quantized duration.
-        # The fps filter on variable-frame-rate phone video otherwise ends each
-        # slice on a different timestamp from atrim, and concat accumulates that.
-        parts.append(
-            f"[0:v]trim=start={start:.6f}:end={end:.6f},setpts=PTS-STARTPTS,{scale},"
-            f"fps={fps}:round=near,tpad=stop_mode=clone:stop_duration=1,"
-            f"trim=duration={exact_text},setpts=PTS-STARTPTS,format=yuv420p[v{index}]"
-        )
-        parts.append(
-            f"[0:a]atrim=start={start:.6f}:end={end:.6f},asetpts=PTS-STARTPTS,"
-            f"aresample=48000,{audio_format},apad=whole_dur={exact_text},"
-            f"atrim=duration={exact_text},asetpts=PTS-STARTPTS[a{index}]"
-        )
-        labels.append(f"[v{index}][a{index}]")
-    parts.append(f"{''.join(labels)}concat=n={len(ranges)}:v=1:a=1[v][a]")
     run_cmd(
-        [
-            "ffmpeg",
-            "-y",
-            "-fflags",
-            "+genpts",
-            "-i",
-            str(src),
-            "-filter_complex",
-            ";".join(parts),
-            "-map",
-            "[v]",
-            "-map",
-            "[a]",
-            "-c:v",
-            "libx264",
-            "-preset",
-            "veryfast",
-            "-crf",
-            str(crf),
-            "-pix_fmt",
-            "yuv420p",
-            "-c:a",
-            "aac",
-            "-b:a",
-            audio_bitrate,
-            "-movflags",
-            "+faststart",
-            str(dest),
-        ]
+        build_cut_command(src, dest, ranges, width, height, fps, crf, audio_bitrate)
     )
     stamp.write_text(key + "\n", encoding="utf-8")
 

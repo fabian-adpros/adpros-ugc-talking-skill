@@ -20,7 +20,17 @@ import subprocess
 import time
 from pathlib import Path
 
-from .engine import pick_device, predict_masks, select_engine, u2net_python_available
+from .engine import (
+    ben2_available,
+    birefnet_available,
+    device_name,
+    estimate_bg_seconds,
+    bg_cost_should_stop,
+    pick_device,
+    predict_masks,
+    select_engine,
+    u2net_python_available,
+)
 from .matte import smooth_alpha, working_size
 from .media import probe, run_cmd
 from .render import cut_stamp_path
@@ -28,6 +38,7 @@ from .util import UGCError, load_json
 
 MODELS = ("u2net", "u2net_human_seg", "u2netp")
 AWAITING_BG = 13
+AWAITING_BG_COST = 14
 _PRODUCT_LABELS = ("product_visible", "product_reveal", "hands")
 
 

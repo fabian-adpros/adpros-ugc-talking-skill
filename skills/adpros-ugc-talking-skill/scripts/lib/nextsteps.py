@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 
-STAGES = ("hook", "delivery", "storyboard", "bg", "render", "final", "error", "transcribe")
+STAGES = ("hook", "delivery", "storyboard", "bg", "bg_cost", "render", "final", "error", "transcribe")
 
 
 def _short(text: str, limit: int = 160) -> str:
@@ -124,6 +124,15 @@ def _bg_steps(plan: dict | None) -> list[tuple]:
     ]
 
 
+def _bg_cost_steps() -> list[tuple]:
+    return [
+        ("bg_go", "Continue with this background anyway", "Sigue con este fondo de todos modos", "--bg-go"),
+        ("faster_u2net", "Use the faster U2-Net engine", "Usa el motor U2-Net, que es más rápido", "--bg-engine u2net --bg-go"),
+        ("smaller_infer", "Lower the inference size", "Baja el tamaño de inferencia", "--bg-infer-size 256 --bg-go"),
+        ("skip_bg", "Skip the background and keep the original", "Salta el fondo y deja el original", "--bg-skip"),
+    ]
+
+
 def build_next_steps(stage: str, plan: dict | None = None, error: str | None = None) -> list[dict]:
     plan = plan or {}
     if stage == "hook":
@@ -149,6 +158,8 @@ def build_next_steps(stage: str, plan: dict | None = None, error: str | None = N
         ]
     elif stage == "bg":
         items = _bg_steps(plan)
+    elif stage == "bg_cost":
+        items = _bg_cost_steps()
     elif stage == "render":
         items = [
             ("export", "Export the MP4", "Exporta el MP4", "export"),

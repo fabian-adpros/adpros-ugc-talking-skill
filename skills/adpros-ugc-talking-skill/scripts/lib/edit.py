@@ -2,7 +2,7 @@
 
 Times are seconds on the source timeline unless a field is explicitly remapped.
 Silences are removed only when they are strictly longer than `min_silence`
-(default 0.4s). Each cut keeps `padding` seconds (default 0.05) of the
+(default 0.4s). Each cut keeps `padding` seconds (default 0.12) of the
 original gap on both sides so the edit does not clip the word edge.
 """
 

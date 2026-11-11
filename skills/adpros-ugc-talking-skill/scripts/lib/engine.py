@@ -75,14 +75,54 @@ def select_engine(requested: str, explicit: bool = False) -> tuple[str, str]:
 
 
 def pick_device():
+    import os
+
     import torch
 
+    # Some BiRefNet ops are missing on MPS. Falling back keeps the run alive.
+    os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
     mps = getattr(torch.backends, "mps", None)
     if mps is not None and mps.is_available():
+        # fp32. fp16 on MPS hits unimplemented ops and the fallback is slower.
         return torch.device("mps")
     if torch.cuda.is_available():
         return torch.device("cuda")
     return torch.device("cpu")
+
+
+# Seconds per frame measured on CPU at short side 320.
+# birefnet: 11s clip, 331 frames, about 1.05 s/frame.
+# u2net CLI: about 72s for that same clip.
+CPU_SECONDS_PER_FRAME = {
+    "birefnet": 1.05,
+    "u2net": 72.0 / 331.0,
+    "ben2": 1.2,
+}
+BG_COST_LIMIT_SECONDS = 180.0
+
+
+def estimate_bg_seconds(engine: str, frames: int, device: str, infer_size: int) -> float | None:
+    """CPU estimate scaled by resolution. MPS has no measurement, so it returns None."""
+    if device == "mps":
+        return None
+    base = CPU_SECONDS_PER_FRAME.get(engine, CPU_SECONDS_PER_FRAME["birefnet"])
+    scale = (max(64, int(infer_size)) / 320.0) ** 2
+    if device == "cuda":
+        scale *= 0.15
+    return base * max(0, int(frames)) * scale
+
+
+def bg_cost_should_stop(device: str, estimate_seconds: float | None, approved: bool) -> bool:
+    if approved or estimate_seconds is None:
+        return False
+    return device == "cpu" and estimate_seconds > BG_COST_LIMIT_SECONDS
+
+
+def device_name() -> str:
+    try:
+        return str(pick_device())
+    except Exception:
+        return "cpu"
 
 
 _MODELS: dict = {}

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.1
+
+- The cut decodes the source once and encodes every kept range in that same ffmpeg process, at CRF 18 / `veryfast` (or VideoToolbox H.264 on a Mac when that encoder exists). Do not hand-roll one ffmpeg per segment.
+- Default silence padding is 0.12s, each join fades for 15ms, and a cut that still lands on speech is widened before the encode.
+- Before background removal the script prints the device, frame count, and a CPU time estimate. A CPU estimate longer than about 3 minutes stops (exit 14) so you can continue, switch to U2-Net, lower the inference size, or skip. MPS is selected on Apple Silicon when PyTorch reports it; that speed was not measured.
+- `./install.sh --with-bg` runs only when a background was requested, and it starts in the background while transcription and the cut continue.
+
 ## 0.3.0
 
 - Optional background replacement with `backgroundremover` and U2-Net. The default model is `u2net`, not the person-only net, so a product in the hand is less likely to disappear. `--bg`, `--bg transparent`, and `--bg-threshold` run after the cuts and before captions. Exit 13 shows side-by-side preview frames. `./install.sh --with-bg` installs it. `export --nle` also copies the alpha, the matte, and the plate.
